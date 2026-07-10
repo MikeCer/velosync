@@ -49,12 +49,21 @@ export interface SessionRecord {
   distance: number;
   avgSpeed: number;
   maxSpeed: number;
+  avgHeartRate: number | null;
+  maxHeartRate: number | null;
 }
 
 export interface BLEDeviceInfo {
   id: string;
   name: string;
   type: "FTMS" | "CSCS";
+}
+
+export interface HRMDeviceInfo {
+  id: string;
+  name: string;
+  type: "HRM";
+  sensorLocation: string | null;
 }
 
 export type SpeedSource = "manual" | "ble" | "velosyncWs";

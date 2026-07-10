@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAppState } from "../context/AppContext";
 import { bleConnector } from "../services/ble";
+import { hrmConnector } from "../services/hrm";
 import { velosyncWsConnector } from "../services/velosyncWs";
 import type { SpeedSource } from "../types";
 
@@ -21,12 +22,16 @@ export default function SpeedSourceSelector() {
     speedSource, setSpeedSource,
     bleDevice, bleConnected, setBleDevice, setBleConnected,
     velosyncWsUrl, velosyncWsConnected, setVelosyncWsConnected,
-    setCurrentSpeedKmh,
-  } = useAppState();
-  const [bleConnecting, setBleConnecting] = useState(false);
-  const [bleError, setBleError] = useState("");
-  const [wsConnecting, setWsConnecting] = useState(false);
-  const [wsError, setWsError] = useState("");
+      hrmDevice, hrmConnected, setHrmDevice, setHrmConnected,
+      heartRate, setHeartRate,
+      setCurrentSpeedKmh,
+    } = useAppState();
+    const [bleConnecting, setBleConnecting] = useState(false);
+    const [bleError, setBleError] = useState("");
+    const [wsConnecting, setWsConnecting] = useState(false);
+    const [wsError, setWsError] = useState("");
+    const [hrmConnecting, setHrmConnecting] = useState(false);
+    const [hrmError, setHrmError] = useState("");
 
   const sources: { key: SpeedSource; label: string }[] = [
     { key: "manual", label: "Manual" },
@@ -95,6 +100,28 @@ export default function SpeedSourceSelector() {
     setSpeedSource("manual");
     localStorage.setItem("speedSource", "manual");
   };
+
+    const handleHrmConnect = async () => {
+      setHrmError("");
+      setHrmConnecting(true);
+      try {
+        hrmConnector.setCallback((hr) => setHeartRate(hr));
+        const info = await hrmConnector.requestDevice();
+        setHrmDevice(info);
+        setHrmConnected(true);
+      } catch (e: any) {
+        setHrmError(e.message);
+      } finally {
+        setHrmConnecting(false);
+      }
+    };
+
+    const handleHrmDisconnect = async () => {
+      await hrmConnector.disconnect();
+      setHrmConnected(false);
+      setHrmDevice(null);
+      setHeartRate(null);
+    };
 
   const isHwConnected = bleConnected || velosyncWsConnected;
 
@@ -208,6 +235,66 @@ export default function SpeedSourceSelector() {
           {wsError && <div style={{ color: C.danger, fontSize: 13, marginTop: 6 }}>{wsError}</div>}
         </div>
       )}
-    </div>
+
+                {/* Heart Rate Monitor — independent from speed source */}
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid " + C.cardBorder }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 16 }}>❤️</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.textSec }}>Heart Rate Monitor</span>
+                    {hrmConnected && (
+                      <span style={{ fontSize: 14, color: C.accent, fontWeight: 700 }}>
+                        {heartRate ?? "--"} BPM
+                      </span>
+                    )}
+                  </div>
+
+                  {hrmConnected ? (
+                    <div>
+                      <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 4 }}>
+                        {hrmDevice?.name || "HR Monitor"}
+                        {hrmDevice?.sensorLocation ? ` · ${hrmDevice.sensorLocation}` : ""}
+                      </div>
+                      <button
+                        onClick={handleHrmDisconnect}
+                        style={{
+                          padding: "6px 14px", borderRadius: 8,
+                          border: "1px solid " + C.danger, background: "transparent",
+                          color: C.danger, cursor: "pointer", fontSize: 13,
+                        }}
+                      >
+                        Disconnect HR
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      {!hrmConnecting && !hrmError && (
+                        <div style={{
+                          fontSize: 12, color: C.textMuted, marginBottom: 8,
+                          background: "var(--bg-input)", padding: "8px 10px", borderRadius: 8,
+                          lineHeight: 1.5,
+                        }}>
+                          <strong>Before connecting:</strong>
+                          <br />1. On your Garmin watch: <em>Settings → Health & Wellness → Wrist Heart Rate → Broadcast Heart Rate</em>
+                          <br />2. Disconnect the watch from your smartphone (Garmin Connect or other apps)
+                          <br />3. Keep the watch awake and nearby
+                        </div>
+                      )}
+                      <button
+                        onClick={handleHrmConnect}
+                        disabled={hrmConnecting}
+                        style={{
+                          padding: "6px 14px", borderRadius: 8,
+                          border: "1px solid " + C.accent, background: "transparent",
+                          color: C.accent, cursor: hrmConnecting ? "not-allowed" : "pointer",
+                          fontSize: 13,
+                        }}
+                      >
+                        {hrmConnecting ? "Connecting..." : "Connect HR Monitor"}
+                      </button>
+                    </div>
+                  )}
+                  {hrmError && <div style={{ color: C.danger, fontSize: 13, marginTop: 6 }}>{hrmError}</div>}
+                </div>
+              </div>
   );
 }

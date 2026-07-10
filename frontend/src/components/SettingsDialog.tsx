@@ -59,6 +59,20 @@ export default function SettingsDialog({ open, onClose }: Props) {
             <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>ESP8266 WebSocket device URL (e.g. ws://192.168.4.1).</div>
           </div>
           <div style={{ borderTop: border2, paddingTop: 16 }}>
+            <label style={{ display: "block", marginBottom: 6, fontSize: 13, color: C.textSec, fontWeight: 500 }}>HUD Position (fullscreen telemetry overlay)</label>
+            <select
+              value={localStorage.getItem("hudCorner") || "top-right"}
+              onChange={(e) => localStorage.setItem("hudCorner", e.target.value)}
+              style={{ padding: "8px 12px", borderRadius: 8, border: border1, background: C.bgInput, color: C.text, fontSize: 14, width: "100%" }}
+            >
+              <option value="top-left">Top Left</option>
+              <option value="top-right">Top Right</option>
+              <option value="bottom-left">Bottom Left</option>
+              <option value="bottom-right">Bottom Right</option>
+            </select>
+            <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>Toggle via 📊 button in fullscreen controls.</div>
+          </div>
+          <div style={{ borderTop: border2, paddingTop: 16 }}>
             <button onClick={async () => { if (confirm("Delete all session history?")) await clearAllSessions(); }} style={{ padding: "8px 16px", borderRadius: 8, border: borderDanger, background: "transparent", color: C.danger, cursor: "pointer", fontSize: 13 }}>Clear session history</button>
           </div>
         </div>

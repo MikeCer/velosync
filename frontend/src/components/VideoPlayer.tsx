@@ -4,6 +4,7 @@ import { getMediaUrl } from "../services/api";
 import SpeedDisplay from "./SpeedDisplay";
 import SpeedSlider from "./SpeedSlider";
 import AudioControl from "./AudioControl";
+import HudOverlay from "./HudOverlay";
 
 export default function VideoPlayer() {
   const { playlist, currentVideoIndex, playbackRate, isPlaying, setIsPlaying, setCurrentVideoIndex, effectiveSpeed } = useAppState();
@@ -14,6 +15,9 @@ export default function VideoPlayer() {
   const [showSpeedGauge, setShowSpeedGauge] = useState(() => {
     return localStorage.getItem("fullscreenSpeedGauge") === "true";
   });
+    const [showHud, setShowHud] = useState(() => {
+      return localStorage.getItem("fullscreenHud") === "true";
+    });
   const hideTimerRef = useRef<number | null>(null);
 
   const currentVideo = playlist[currentVideoIndex];
@@ -80,6 +84,14 @@ export default function VideoPlayer() {
     });
   }, []);
 
+    const toggleHud = useCallback(() => {
+      setShowHud((prev) => {
+        const next = !prev;
+        localStorage.setItem("fullscreenHud", String(next));
+        return next;
+      });
+    }, []);
+
   const handleEnded = useCallback(() => {
     if (currentVideoIndex < playlist.length - 1) {
       setCurrentVideoIndex(currentVideoIndex + 1);
@@ -141,6 +153,9 @@ export default function VideoPlayer() {
         </div>
       )}
 
+            {/* HUD overlay (fullscreen only, persistent) */}
+            {isFullscreen && <HudOverlay visible={showHud} />}
+
       {isFullscreen && showOverlay && (
         <div style={{
           position: "absolute", bottom: 0, left: 0, right: 0,
@@ -186,6 +201,17 @@ export default function VideoPlayer() {
               >
                 ⚡
               </button>
+                            <button
+                              onClick={toggleHud}
+                              title={showHud ? "Hide telemetry HUD" : "Show telemetry HUD"}
+                              style={{
+                                padding: "6px 14px", borderRadius: 8, border: "none",
+                                background: showHud ? "rgba(96,165,250,0.25)" : "rgba(255,255,255,0.15)",
+                                color: "#fff", fontSize: 16, cursor: "pointer",
+                              }}
+                            >
+                              📊
+                            </button>
               <button onClick={toggleFullscreen}
                 style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: "rgba(255,255,255,0.15)", color: "#fff", fontSize: 16, cursor: "pointer" }}>
                 ↙

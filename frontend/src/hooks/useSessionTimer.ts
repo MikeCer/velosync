@@ -11,26 +11,31 @@ export function useSessionTimer() {
     totalDistance,
     setTotalDistance,
     currentSpeedKmh,
-    useBleSpeed,
     manualSpeedKmh,
+    speedSource,
+    heartRate,
     playlist,
     currentVideoIndex,
     activeRoute,
   } = useAppState();
 
   const intervalRef = useRef<number | null>(null);
-  const sessionRef = useRef({ start: 0, distance: 0 });
+  const sessionRef = useRef({ start: 0, distance: 0, hrSamples: [] as number[] });
 
   useEffect(() => {
     if (isPlaying) {
       sessionRef.current.start = Date.now() - sessionElapsed * 1000;
+      sessionRef.current.hrSamples = [];
       intervalRef.current = window.setInterval(() => {
         const elapsed = (Date.now() - sessionRef.current.start) / 1000;
-        const speed = useBleSpeed ? currentSpeedKmh : manualSpeedKmh;
+        const speed = speedSource !== "manual" ? currentSpeedKmh : manualSpeedKmh;
         const distance = speed / 3600; // km per second
         sessionRef.current.distance += distance;
         setSessionElapsed(elapsed);
         setTotalDistance(sessionRef.current.distance);
+        if (heartRate !== null) {
+          sessionRef.current.hrSamples.push(heartRate);
+        }
       }, 1000);
     } else {
       if (intervalRef.current) {
@@ -47,6 +52,12 @@ export function useSessionTimer() {
   useEffect(() => {
     if (!isPlaying && sessionElapsed > 5) {
       const currentVideo = playlist[currentVideoIndex];
+      const hrSamples = sessionRef.current.hrSamples;
+      const avgHR = hrSamples.length > 0
+        ? Math.round(hrSamples.reduce((a, b) => a + b, 0) / hrSamples.length)
+        : null;
+      const maxHR = hrSamples.length > 0 ? Math.max(...hrSamples) : null;
+
       const record: SessionRecord = {
         id: Date.now().toString(),
         date: Date.now(),
@@ -56,7 +67,9 @@ export function useSessionTimer() {
         duration: Math.round(sessionElapsed),
         distance: totalDistance,
         avgSpeed: sessionElapsed > 0 ? totalDistance / (sessionElapsed / 3600) : 0,
-        maxSpeed: useBleSpeed ? currentSpeedKmh : manualSpeedKmh,
+        maxSpeed: speedSource !== "manual" ? currentSpeedKmh : manualSpeedKmh,
+        avgHeartRate: avgHR,
+        maxHeartRate: maxHR,
       };
       saveSession(record).catch(() => {});
       setSessionElapsed(0);

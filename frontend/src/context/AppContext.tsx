@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useMemo } from "react";
-import type { LibraryVideo, Route, BLEDeviceInfo, SpeedSource } from "../types";
+import React, { createContext, useContext, useState } from "react";
+import type { LibraryVideo, Route, BLEDeviceInfo, HRMDeviceInfo, SpeedSource } from "../types";
 import { speedToPlaybackRate, getBaselineSpeed } from "../services/speedMapping";
 
 interface AppState {
@@ -25,6 +25,13 @@ interface AppState {
   setBleDevice: (d: BLEDeviceInfo | null) => void;
   bleConnected: boolean;
   setBleConnected: (c: boolean) => void;
+
+  hrmDevice: HRMDeviceInfo | null;
+  setHrmDevice: (d: HRMDeviceInfo | null) => void;
+  hrmConnected: boolean;
+  setHrmConnected: (c: boolean) => void;
+  heartRate: number | null;
+  setHeartRate: (hr: number | null) => void;
 
   isPlaying: boolean;
   setIsPlaying: (p: boolean) => void;
@@ -64,6 +71,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [velosyncWsConnected, setVelosyncWsConnected] = useState(false);
   const [bleDevice, setBleDevice] = useState<BLEDeviceInfo | null>(null);
   const [bleConnected, setBleConnected] = useState(false);
+  const [hrmDevice, setHrmDevice] = useState<HRMDeviceInfo | null>(null);
+  const [hrmConnected, setHrmConnected] = useState(false);
+  const [heartRate, setHeartRate] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [sessionElapsed, setSessionElapsed] = useState(0);
   const [totalDistance, setTotalDistance] = useState(0);
@@ -89,6 +99,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     velosyncWsConnected, setVelosyncWsConnected,
     bleDevice, setBleDevice,
     bleConnected, setBleConnected,
+    hrmDevice, setHrmDevice,
+    hrmConnected, setHrmConnected,
+    heartRate, setHeartRate,
     isPlaying, setIsPlaying,
     sessionElapsed, setSessionElapsed,
     totalDistance, setTotalDistance,
