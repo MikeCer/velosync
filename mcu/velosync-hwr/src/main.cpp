@@ -5,11 +5,11 @@
 #include <string.h>
 
 #ifndef WIFI_SSID
-#define WIFI_SSID "CNWIFI-F1"
+
 #endif
 
 #ifndef WIFI_PASSWORD
-#define WIFI_PASSWORD "ef3600acr2032"
+
 #endif
 
 // ── Hardware ───────────────────────────────────────────
