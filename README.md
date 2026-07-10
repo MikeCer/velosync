@@ -4,17 +4,47 @@ Speed-adaptive video player for indoor cycling training. Video playback speed sc
 
 ## Architecture
 
-```
-┌──────────────────────┐         ┌──────────────────────┐
-│  Tablet / Desktop  │  HTTP   │  Backend (LAN/Cloud) │
-│  React PWA           │────────▶│  FastAPI + yt-dlp    │
-│  - Video player      │         │  - Download & stream │
-│  - Speed control      │         │  - Docker container  │
-│  - BLE / WebSocket    │         └──────────────────────┘
-│  - Map overlay       │
-│  - Session stats     │
-│  - Video library     │
-└──────────────────────┘
+```mermaid
+graph LR
+    subgraph Frontend["Tablet / Desktop — React PWA"]
+        VideoPlayer["Video Player<br/>+ Speed Control"]
+        BLE["BLE Sensor<br/>FTMS / CSCS"]
+        WS["WebSocket Client"]
+        Map["Map Overlay<br/>Leaflet"]
+        Sessions["Session Stats"]
+        Library["Video Library"]
+    end
+
+    subgraph Hardware["Speed Sensors"]
+        BikeSensor["BLE Bike Sensor"]
+        ESP8266["ESP8266<br/>Reed Sensor"]
+    end
+
+    subgraph Backend["Backend — LAN or Cloud"]
+        API["FastAPI"]
+        YTDLP["yt-dlp<br/>YouTube Downloader"]
+        Stream["Media Streaming"]
+        Docker["Docker Container"]
+    end
+
+    subgraph Storage["Client Storage"]
+        IDB["IndexedDB"]
+    end
+
+    BikeSensor -- "BLE" --> BLE
+    ESP8266 -- "WebSocket" --> WS
+    BLE --> VideoPlayer
+    WS --> VideoPlayer
+
+    Frontend -- "HTTP / SSE" --> API
+    API --> YTDLP
+    API --> Stream
+    YTDLP --> Docker
+    Stream --> Docker
+
+    Map --> IDB
+    Sessions --> IDB
+    Library --> IDB
 ```
 
 ## Quick Start
