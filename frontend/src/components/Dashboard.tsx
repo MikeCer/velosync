@@ -15,33 +15,12 @@ import LibraryView from "./LibraryView";
 import DownloadPanel from "./DownloadPanel";
 import QueuePanel from "./QueuePanel";
 
-const C = {
-  bg: "var(--bg-tertiary)",
-  border: "var(--border-primary)",
-  text: "var(--text-primary)",
-  textMuted: "var(--text-muted)",
-  accent: "var(--accent)",
-  success: "var(--success)",
-  danger: "var(--danger)",
-  card: "var(--bg-secondary)",
-  cardBorder: "var(--border-primary)",
-  btnGlass: "var(--btn-glass)",
-};
-
-const ICONS = {
-  sun: "\u2600\uFE0F",
-  moon: "\uD83C\uDF19",
-  bike: "\uD83D\uDEB4",
-  gear: "\u2699",
-  play: "\u25B6",
-  stop: "\u23F9",
-};
-
 export default function Dashboard() {
   const { playlist, isPlaying, setIsPlaying, setLibrary, speedSource, currentSpeedKmh } = useAppState();
   const { theme, toggleTheme } = useTheme();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<"queue" | "library" | "download">("queue");
   const playerVideoRef = useRef<HTMLVideoElement | null>(null);
   const autoPausedRef = useRef(false);
 
@@ -67,7 +46,6 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-pause/resume when hardware sensor speed reaches zero
   useEffect(() => {
     if (speedSource === "manual") {
       autoPausedRef.current = false;
@@ -92,86 +70,127 @@ export default function Dashboard() {
   };
   const handleDownloadComplete = useCallback(() => {}, []);
 
-  const border = "1px solid " + C.cardBorder;
-  const headerBorder = "1px solid " + C.border;
-
   return (
     <div style={{
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      background: C.bg, minHeight: "100vh", color: C.text,
+      background: "var(--bg-primary)",
+      minHeight: "100vh",
+      color: "var(--text-primary)",
     }}>
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
+      {/* Glass header */}
       {!isFullscreen && (
         <header style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "10px 24px", background: C.bg, borderBottom: headerBorder,
+          padding: "12px 24px",
+          background: "var(--glass-bg)",
+          backdropFilter: "var(--glass-blur)",
+          WebkitBackdropFilter: "var(--glass-blur)",
+          borderBottom: "1px solid var(--glass-border)",
           position: "sticky", top: 0, zIndex: 100,
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <button
               onClick={toggleTheme}
               title="Toggle theme"
               style={{
-                padding: "4px 8px", borderRadius: 20, border: border,
-                background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 16,
+                width: 38, height: 38, borderRadius: "var(--radius-md)",
+                border: "1px solid var(--glass-border)",
+                background: "var(--glass-bg)",
+                color: "var(--text-secondary)",
+                cursor: "pointer", fontSize: 18,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                transition: "all var(--transition-fast)",
               }}
             >
-              {theme === "dark" ? ICONS.sun : ICONS.moon}
+              {theme === "dark" ? "☀️" : "🌙"}
             </button>
-            <span style={{ fontSize: 20, fontWeight: 700, color: C.accent }}>{ICONS.bike} VeloSync</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{
+                width: 36, height: 36, borderRadius: "var(--radius-md)",
+                background: "var(--accent-gradient)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 18, boxShadow: "var(--shadow-glow)",
+              }}>🚴</span>
+              <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>
+                <span style={{ color: "var(--accent-light)" }}>Velo</span>
+                <span style={{ color: "var(--text-primary)" }}>Sync</span>
+              </span>
+            </div>
           </div>
           <button
             onClick={() => setSettingsOpen(true)}
             style={{
-              padding: "6px 14px", borderRadius: 20, border: border,
-              background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 16,
+              width: 38, height: 38, borderRadius: "var(--radius-md)",
+              border: "1px solid var(--glass-border)",
+              background: "var(--glass-bg)",
+              color: "var(--text-secondary)",
+              cursor: "pointer", fontSize: 18,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all var(--transition-fast)",
             }}
           >
-            {ICONS.gear}
+            ⚙️
           </button>
         </header>
       )}
 
-      <div style={{ display: "flex", gap: 0, padding: isFullscreen ? 0 : "24px", maxWidth: 1800, margin: "0 auto" }}>
-        <div style={{ flex: isFullscreen ? "1 1 100%" : "1 1 0", minWidth: 0, maxWidth: isFullscreen ? "100%" : "68%" }}>
+      {/* Main content area */}
+      <div style={{
+        display: "flex", gap: 0,
+        padding: isFullscreen ? 0 : "20px",
+        maxWidth: 1800, margin: "0 auto",
+              flexWrap: "wrap",
+      }}>
+        {/* Left: Video + Controls */}
+        <div style={{
+                flex: isFullscreen ? "1 1 100%" : "1 1 500px",
+          minWidth: 0,
+                maxWidth: isFullscreen ? "100%" : "100%",
+        }}>
           <VideoPlayer />
 
           {!isFullscreen && playlist.length > 0 && (
-            <div style={{
-              marginTop: 12, padding: "14px 16px", borderRadius: 12,
-              background: C.card, border: border,
+            <div className="glass-card" style={{
+              marginTop: 16, padding: "20px 24px",
             }}>
               <SpeedDisplay />
-              <div style={{ display: "flex", gap: 16, alignItems: "flex-start", marginTop: 8 }}>
-                <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", gap: 20, alignItems: "flex-start", marginTop: 16, flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
                   <SpeedSlider />
                 </div>
-                <div style={{ flex: "0 0 auto", display: "flex", gap: 12, alignItems: "center", paddingTop: 2 }}>
+                <div style={{ flex: "0 0 auto", display: "flex", gap: 12, alignItems: "center" }}>
                   <AudioControl videoRef={playerVideoRef} />
                   {!isPlaying ? (
                     <button
                       onClick={handleStart}
                       disabled={playlist.length === 0}
+                      className="btn-gradient"
                       style={{
-                        padding: "10px 28px", borderRadius: 24, border: "none",
-                        background: playlist.length > 0 ? C.success : C.cardBorder,
-                        color: "#fff", fontSize: 15, fontWeight: 600,
-                        cursor: playlist.length > 0 ? "pointer" : "not-allowed",
-                        opacity: playlist.length > 0 ? 1 : 0.5, whiteSpace: "nowrap",
-                      }}>
-                      {ICONS.play} Start
+                        padding: "12px 32px", fontSize: 16,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      ▶ Start
                     </button>
                   ) : (
                     <button
                       onClick={handleStop}
-                      style={{ padding: "10px 28px", borderRadius: 24, border: "none", background: C.danger, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-                      {ICONS.stop} Stop
+                      style={{
+                        padding: "12px 32px", borderRadius: "var(--radius-lg)",
+                        border: "none",
+                        background: "var(--danger)",
+                        color: "#fff", fontSize: 16, fontWeight: 600,
+                        cursor: "pointer", whiteSpace: "nowrap",
+                        boxShadow: "0 2px 12px rgba(239, 68, 68, 0.4)",
+                        transition: "all var(--transition-base)",
+                      }}>
+                      ⏹ Stop
                     </button>
                   )}
                 </div>
               </div>
-              <div style={{ marginTop: 10 }}>
+              <div style={{ marginTop: 14 }}>
                 <SpeedSourceSelector />
                 <SessionBar />
               </div>
@@ -185,14 +204,61 @@ export default function Dashboard() {
           )}
         </div>
 
-        {!isFullscreen && (
-          <div style={{ flex: "0 0 370px", marginLeft: 24, display: "flex", flexDirection: "column", gap: 16 }}>
-            <DownloadPanel onDownloadComplete={handleDownloadComplete} />
-            <QueuePanel />
-            <LibraryView />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+        {/* Right sidebar with tab navigation */}
+                {!isFullscreen && (
+                  <div style={{
+                    flex: "0 0 380px",
+                    marginLeft: 20,
+                    display: "flex", flexDirection: "column", gap: 0,
+                    minWidth: 320,
+                  }}>
+                    {/* Tab bar */}
+                    <div style={{
+                      display: "flex", gap: 4, marginBottom: 16,
+                      padding: 4, borderRadius: "var(--radius-lg)",
+                      background: "var(--bg-input)",
+                      border: "1px solid var(--glass-border)",
+                    }}>
+                      {([
+                        { key: "queue", label: "🎬 Queue", badge: playlist.length },
+                        { key: "download", label: "⬇ Download", badge: null },
+                        { key: "library", label: "📂 Library", badge: null },
+                      ] as const).map((tab) => (
+                        <button
+                          key={tab.key}
+                          onClick={() => setSidebarTab(tab.key)}
+                          style={{
+                            flex: 1, padding: "10px 12px", borderRadius: "var(--radius-md)",
+                            border: "none",
+                            background: sidebarTab === tab.key ? "var(--accent-bg)" : "transparent",
+                            color: sidebarTab === tab.key ? "var(--accent-light)" : "var(--text-muted)",
+                            cursor: "pointer", fontSize: 13, fontWeight: 600,
+                            transition: "all var(--transition-fast)",
+                            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                          }}
+                        >
+                          {tab.label}
+                          {tab.badge != null && tab.badge > 0 && (
+                            <span style={{
+                              background: "var(--accent-gradient)",
+                              color: "#fff", fontSize: 10, fontWeight: 700,
+                              padding: "1px 7px", borderRadius: "var(--radius-full)",
+                              minWidth: 20, textAlign: "center",
+                            }}>{tab.badge}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Tab content */}
+                    <div style={{ flex: 1, overflow: "auto" }}>
+                      {sidebarTab === "download" && <DownloadPanel onDownloadComplete={handleDownloadComplete} />}
+                      {sidebarTab === "queue" && <QueuePanel />}
+                      {sidebarTab === "library" && <LibraryView />}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }

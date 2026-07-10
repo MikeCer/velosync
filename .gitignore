@@ -32,3 +32,6 @@ __pycache__
 .vscode/ipch
 
 media
+
+# HTTPS certs for local dev
+frontend/cert.pfx

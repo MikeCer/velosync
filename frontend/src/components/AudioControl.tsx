@@ -14,7 +14,6 @@ export default function AudioControl({ videoRef, compact = false }: Props) {
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
 
-  // Sync from video element
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -41,22 +40,36 @@ export default function AudioControl({ videoRef, compact = false }: Props) {
 
   const icon = muted || volume === 0 ? "🔇" : volume < 0.5 ? "🔉" : "🔊";
 
+  const sliderStyle: React.CSSProperties = {
+    width: compact ? 60 : 80,
+    height: 4,
+    borderRadius: "var(--radius-full)",
+    background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${volume * 100}%, var(--border-secondary) ${volume * 100}%, var(--border-secondary) 100%)`,
+    appearance: "none",
+    WebkitAppearance: "none",
+    cursor: "pointer",
+    outline: "none",
+  };
+
   if (compact) {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <button
           onClick={toggleMute}
-          style={{ padding: "4px 6px", borderRadius: 4, border: "none", background: "transparent", color: "#fff", fontSize: 16, cursor: "pointer", lineHeight: 1 }}
+          style={{
+            width: 32, height: 32, borderRadius: "var(--radius-sm)",
+            border: "none", background: "rgba(255,255,255,0.1)",
+            color: "#fff", fontSize: 16, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
           title={muted ? "Unmute" : "Mute"}
         >
           {icon}
         </button>
         <input
-          type="range"
-          min={0} max={1} step={0.05}
-          value={volume}
-          onChange={handleVolumeChange}
-          style={{ width: 60, accentColor: "#4f46e5" }}
+          type="range" min={0} max={1} step={0.05}
+          value={volume} onChange={handleVolumeChange}
+          style={sliderStyle}
           title={`Volume: ${Math.round(volume * 100)}%`}
         />
       </div>
@@ -66,22 +79,27 @@ export default function AudioControl({ videoRef, compact = false }: Props) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 8,
-      padding: "6px 10px", borderRadius: 8,
-      background: "rgba(255,255,255,0.08)",
+      padding: "8px 14px", borderRadius: "var(--radius-lg)",
+      background: "var(--bg-input)",
+      border: "1px solid var(--glass-border)",
     }}>
       <button
         onClick={toggleMute}
-        style={{ padding: "2px 4px", borderRadius: 4, border: "none", background: "transparent", color: "#fff", fontSize: 18, cursor: "pointer", lineHeight: 1 }}
+        style={{
+          width: 32, height: 32, borderRadius: "var(--radius-sm)",
+          border: "none", background: "transparent",
+          color: "var(--text-primary)", fontSize: 18, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          transition: "all var(--transition-fast)",
+        }}
         title={muted ? "Unmute" : "Mute"}
       >
         {icon}
       </button>
       <input
-        type="range"
-        min={0} max={1} step={0.05}
-        value={volume}
-        onChange={handleVolumeChange}
-        style={{ width: 80, accentColor: "#4f46e5" }}
+        type="range" min={0} max={1} step={0.05}
+        value={volume} onChange={handleVolumeChange}
+        style={sliderStyle}
         title={`Volume: ${Math.round(volume * 100)}%`}
       />
     </div>

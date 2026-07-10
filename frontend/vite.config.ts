@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import fs from "node:fs";
 
 export default defineConfig({
   plugins: [
@@ -43,4 +44,22 @@ export default defineConfig({
       },
     },
   },
+  // HTTPS for LAN access (Web Bluetooth requires secure context)
+  ...(process.env.VITE_HTTPS === "true"
+    ? {
+        server: {
+          port: 5173,
+          https: {
+            pfx: fs.readFileSync("./cert.pfx"),
+            passphrase: "velosync",
+          },
+          proxy: {
+            "/api": {
+              target: "http://localhost:8000",
+              changeOrigin: true,
+            },
+          },
+        },
+      }
+    : {}),
 });
