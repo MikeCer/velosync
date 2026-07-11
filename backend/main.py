@@ -201,7 +201,7 @@ def _run_route_generation(gen_id: str, req: RouteGenerateRequest) -> None:
                 url = (
                     f"https://maps.googleapis.com/maps/api/streetview"
                     f"?location={wp.lat},{wp.lng}"
-                    f"&size=1920x1080"
+                    f"&size=640x400"
                     f"&heading={heading:.1f}"
                     f"&fov=120"
                     f"&pitch=0"
