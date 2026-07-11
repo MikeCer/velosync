@@ -1,4 +1,4 @@
-import type { VideoMeta, LibraryVideo } from "../types";
+import type { VideoMeta, LibraryVideo, RouteVideoMeta, RouteGenerateRequest, CoverageCheckRequest, CoverageResult, CacheInfo } from "../types";
 
 export interface DownloadState {
   [downloadId: string]: {
@@ -6,6 +6,20 @@ export interface DownloadState {
     percent: number;
     title: string;
     video_id?: string;
+    error?: string;
+  };
+}
+
+export interface RouteProgressState {
+  [genId: string]: {
+    status: string;
+    percent: number;
+    name: string;
+    total_frames?: number;
+    total_km?: number;
+    frames_downloaded?: number;
+    route_id?: string;
+    filename?: string;
     error?: string;
   };
 }
@@ -60,6 +74,27 @@ export async function fetchLibrary(): Promise<LibraryVideo[]> {
     fileSize: v.file_size,
     downloadedAt: v.downloaded_at,
     youtubeUrl: v.youtube_url,
+    source: "youtube" as const,
+  }));
+}
+
+export async function fetchUnifiedLibrary(): Promise<LibraryVideo[]> {
+  const res = await apiFetch(`/api/library`);
+  const data = await res.json();
+  return data.map((v: any) => ({
+    id: v.id,
+    title: v.title,
+    filename: v.filename,
+    duration: v.duration,
+    thumbnail: v.thumbnail,
+    quality: v.quality,
+    fileSize: v.fileSize ?? v.file_size ?? 0,
+    downloadedAt: v.downloadedAt ?? v.downloaded_at ?? v.generated_at ?? 0,
+    youtubeUrl: v.youtubeUrl ?? "",
+    source: v.source as "youtube" | "streetview",
+    waypoints: v.waypoints,
+    distanceKm: v.distanceKm,
+    description: v.description,
   }));
 }
 
@@ -94,4 +129,60 @@ export function subscribeDownloadProgress(onUpdate: (state: DownloadState) => vo
     // EventSource auto-reconnects
   };
   return () => es.close();
+}
+
+// ── Street View route functions ──────────────────────
+
+export async function generateRouteVideo(request: RouteGenerateRequest): Promise<{ generation_id: string }> {
+  const res = await apiFetch(`/api/routes/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  return res.json();
+}
+
+export async function fetchRouteLibrary(): Promise<RouteVideoMeta[]> {
+  const res = await apiFetch(`/api/routes/list`);
+  return res.json();
+}
+
+export async function deleteRouteVideo(routeId: string): Promise<void> {
+  await apiFetch(`/api/routes/${encodeURIComponent(routeId)}`, { method: "DELETE" });
+}
+
+export function subscribeRouteProgress(onUpdate: (state: RouteProgressState) => void): () => void {
+  const url = `${baseUrl()}/api/routes/progress`;
+  const es = new EventSource(url);
+  es.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onUpdate(data);
+    } catch {}
+  };
+  es.onerror = () => {};
+  return () => es.close();
+}
+
+export async function checkRouteCoverage(request: CoverageCheckRequest): Promise<CoverageResult> {
+  const res = await apiFetch(`/api/routes/check-coverage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  return res.json();
+}
+
+export async function regenerateRouteVideo(request: RouteGenerateRequest): Promise<{ generation_id: string }> {
+  const res = await apiFetch(`/api/routes/regenerate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  return res.json();
+}
+
+export async function fetchCacheInfo(cacheId: string): Promise<CacheInfo> {
+  const res = await apiFetch(`/api/routes/cache-info/${encodeURIComponent(cacheId)}`);
+  return res.json();
 }

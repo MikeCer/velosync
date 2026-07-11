@@ -126,7 +126,7 @@ export default function VideoPlayer() {
         controls={false}
         playsInline
         onEnded={handleEnded}
-        style={{ width: "100%", display: "block" }}
+              style={{ width: "100%", display: "block", aspectRatio: "16/9", objectFit: "contain", background: "#000" }}
       />
 
       {/* Persistent speed gauge in top-left (fullscreen only) */}

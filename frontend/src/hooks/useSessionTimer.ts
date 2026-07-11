@@ -70,7 +70,9 @@ export function useSessionTimer() {
         maxSpeed: speedSource !== "manual" ? currentSpeedKmh : manualSpeedKmh,
         avgHeartRate: avgHR,
         maxHeartRate: maxHR,
-      };
+              videoSource: currentVideo?.source,
+              routeVideoId: currentVideo?.source === "streetview" ? currentVideo.id : undefined,
+            };
       saveSession(record).catch(() => {});
       setSessionElapsed(0);
       setTotalDistance(0);

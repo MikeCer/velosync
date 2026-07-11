@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useAppState } from "../context/AppContext";
-import { fetchLibrary, deleteVideo, getMediaUrl } from "../services/api";
+import { deleteVideo, deleteRouteVideo, getMediaUrl, fetchUnifiedLibrary } from "../services/api";
 import type { LibraryVideo } from "../types";
 
 function formatSize(bytes: number): string {
@@ -14,12 +14,43 @@ function formatDuration(sec: number | null): string {
   return `${m}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 }
 
+function SourceBadge({ source }: { source: "youtube" | "streetview" }) {
+  const colors: Record<string, { bg: string; text: string; label: string }> = {
+    youtube: { bg: "rgba(239, 68, 68, 0.15)", text: "#f87171", label: "YouTube" },
+    streetview: { bg: "rgba(34, 197, 94, 0.15)", text: "#4ade80", label: "Street View" },
+  };
+  const c = colors[source];
+  return (
+    <span style={{
+      padding: "1px 6px", borderRadius: "var(--radius-sm)",
+      background: c.bg, color: c.text,
+      fontSize: 9, fontWeight: 700, textTransform: "uppercase",
+      letterSpacing: "0.04em", flexShrink: 0,
+    }}>
+      {c.label}
+    </span>
+  );
+}
+
 export default function LibraryView() {
   const { library, setLibrary, playlist, setPlaylist } = useAppState();
   const refresh = useCallback(() => {
-    fetchLibrary().then(setLibrary).catch(() => {});
+    fetchUnifiedLibrary().then(setLibrary).catch(() => {});
   }, [setLibrary]);
   const inPlaylistCount = library.filter((v) => playlist.some((p) => p.id === v.id)).length;
+
+  const handleDelete = async (video: LibraryVideo) => {
+    if (!confirm(`Delete "${video.title}"?`)) return;
+    try {
+      if (video.source === "streetview") {
+        await deleteRouteVideo(video.id);
+      } else {
+        await deleteVideo(video.id);
+      }
+      setPlaylist(playlist.filter((v) => v.id !== video.id));
+      refresh();
+    } catch {}
+  };
 
   return (
     <div className="glass-card" style={{ padding: "20px" }}>
@@ -55,7 +86,7 @@ export default function LibraryView() {
           background: "var(--bg-input)", borderRadius: "var(--radius-md)",
           border: "1px dashed var(--glass-border)",
         }}>
-          No videos yet. Download videos in the Download tab.
+          No videos yet. Download videos or create Street View routes.
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -84,7 +115,7 @@ export default function LibraryView() {
                   {video.thumbnail ? (
                     <img src={getMediaUrl(video.thumbnail)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   ) : (
-                    <div style={{ width: "100%", height: "100%", background: "var(--bg-input)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🎬</div>
+                    <div style={{ width: "100%", height: "100%", background: "var(--bg-input)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>{video.source === "streetview" ? "🗺" : "🎬"}</div>
                   )}
                   {video.duration && (
                     <span style={{
@@ -100,6 +131,9 @@ export default function LibraryView() {
 
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 1 }}>
+                    <SourceBadge source={video.source} />
+                  </div>
                   <div style={{
                     fontSize: 13, fontWeight: 500, color: "var(--text-primary)",
                     lineHeight: 1.3,
@@ -109,7 +143,11 @@ export default function LibraryView() {
                     {video.title}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
-                    {video.quality} · {formatSize(video.fileSize)}
+                    {video.source === "streetview"
+                      ? `🚲 ${video.distanceKm?.toFixed(1) ?? "?"} km · ${video.quality}`
+                      : `${video.quality} · ${formatSize(video.fileSize)}`
+                    }
+                    {video.description ? ` — ${video.description}` : ""}
                   </div>
                 </div>
 
@@ -149,15 +187,7 @@ export default function LibraryView() {
                     </button>
                   )}
                   <button
-                    onClick={async () => {
-                      if (confirm(`Delete "${video.title}"?`)) {
-                        try {
-                          await deleteVideo(video.id);
-                          setPlaylist(playlist.filter((v) => v.id !== video.id));
-                          refresh();
-                        } catch {}
-                      }
-                    }}
+                    onClick={() => handleDelete(video)}
                     style={{
                       padding: "5px 8px", borderRadius: "var(--radius-sm)",
                       border: "1px solid var(--glass-border)",
