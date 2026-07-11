@@ -63,6 +63,7 @@ class RouteGenerateRequest(BaseModel):
     description: str = ""
     api_key: str
     spacing_m: float = 10.0
+    quality: str = "high"
     cached_route_id: Optional[str] = None  # If regenerating from cached route
 
 
@@ -127,13 +128,19 @@ def _save_routes_metadata(entries: list[dict]) -> None:
     ROUTES_META_FILE.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def _frame_cache_key(lat: float, lng: float, heading: float) -> str:
+QUALITY_SIZE_MAP = {
+    "high": "1920x1080",
+    "medium": "1280x720",
+    "low": "640x400",
+}
+
+def _frame_cache_key(lat: float, lng: float, heading: float, quality: str = "high") -> str:
     """Cache key for a Street View frame, rounded to avoid floating point differences."""
-    return f"{round(lat, 5)}_{round(lng, 5)}_{round(heading, 0)}.jpg"
+    return f"{round(lat, 5)}_{round(lng, 5)}_{round(heading, 0)}_{quality}.jpg"
 
 
-def _cached_frame_path(lat: float, lng: float, heading: float) -> Path:
-    return FRAMES_CACHE / _frame_cache_key(lat, lng, heading)
+def _cached_frame_path(lat: float, lng: float, heading: float, quality: str = "high") -> Path:
+    return FRAMES_CACHE / _frame_cache_key(lat, lng, heading, quality)
 
 
 def _run_route_generation(gen_id: str, req: RouteGenerateRequest) -> None:
@@ -185,6 +192,9 @@ def _run_route_generation(gen_id: str, req: RouteGenerateRequest) -> None:
         cached_count = 0
         downloaded_count = 0
 
+        quality = getattr(req, "quality", "high") or "high"
+        image_size = QUALITY_SIZE_MAP.get(quality, QUALITY_SIZE_MAP["high"])
+
         for idx, wp in enumerate(dense):
             # Compute heading to next point (or use previous heading for last point)
             if idx < len(dense) - 1:
@@ -193,7 +203,7 @@ def _run_route_generation(gen_id: str, req: RouteGenerateRequest) -> None:
                 heading = _bearing(dense[idx - 1].lat, dense[idx - 1].lng, wp.lat, wp.lng)
 
             # Check frame cache first
-            cached_frame = _cached_frame_path(wp.lat, wp.lng, heading)
+            cached_frame = _cached_frame_path(wp.lat, wp.lng, heading, quality)
             if cached_frame.exists():
                 frame_paths.append(cached_frame)
                 cached_count += 1
@@ -201,7 +211,7 @@ def _run_route_generation(gen_id: str, req: RouteGenerateRequest) -> None:
                 url = (
                     f"https://maps.googleapis.com/maps/api/streetview"
                     f"?location={wp.lat},{wp.lng}"
-                    f"&size=640x400"
+                    f"&size={image_size}"
                     f"&heading={heading:.1f}"
                     f"&fov=120"
                     f"&pitch=0"

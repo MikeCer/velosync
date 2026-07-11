@@ -98,10 +98,11 @@ type GenerationState =
   const [autoRouteError, setAutoRouteError] = useState("");
     const [travelMode, setTravelMode] = useState<string>("WALKING");
   const [frameSpacing, setFrameSpacing] = useState(10);  // meters between frames
-  const [coverageChecking, setCoverageChecking] = useState(false);
-  const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
-  const [showRegenDialog, setShowRegenDialog] = useState(false);
-  const [regenTarget, setRegenTarget] = useState<RouteVideoMeta | null>(null);
+    const [imageQuality, setImageQuality] = useState("high");  // Street View image resolution
+    const [coverageChecking, setCoverageChecking] = useState(false);
+    const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
+    const [showRegenDialog, setShowRegenDialog] = useState(false);
+    const [regenTarget, setRegenTarget] = useState<RouteVideoMeta | null>(null);
 
   // Saved drafts & generated videos
   const [drafts, setDrafts] = useState<RouteDraft[]>([]);
@@ -472,6 +473,7 @@ type GenerationState =
           description: description.trim(),
           api_key: googleApiKey,
           spacing_m: frameSpacing,
+          quality: imageQuality,
         });
         activeGenId = generation_id;
         activeGenName = routeName.trim();
@@ -514,6 +516,7 @@ type GenerationState =
           description: regenTarget.description || "",
           api_key: googleApiKey,
           spacing_m: frameSpacing,
+          quality: imageQuality,
           cached_route_id: regenTarget.cache_id,
         });
         activeGenId = generation_id;
@@ -942,6 +945,25 @@ type GenerationState =
                             <option value={30}>30 m (faster, less data)</option>
                           </select>
                         </div>
+                                                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                                  <span style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                                                    Quality:
+                                                  </span>
+                                                  <select
+                                                    value={imageQuality}
+                                                    onChange={(e) => setImageQuality(e.target.value)}
+                                                    style={{
+                                                      ...inputStyle,
+                                                      flex: 1,
+                                                      padding: "4px 6px",
+                                                      cursor: "pointer",
+                                                    }}
+                                                  >
+                                                    <option value="high">1920×1080 (HD, higher API cost)</option>
+                                                    <option value="medium">1280×720 (balanced)</option>
+                                                    <option value="low">640×400 (fast, lower cost)</option>
+                                                  </select>
+                                                </div>
                         <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>
                           Est. frames: ~{Math.round(dist * 1000 / (frameSpacing || 1))}  ·  Est. data: ~{Math.round(dist * 1000 / (frameSpacing || 1) * 0.15)} MB
                         </div>
@@ -1380,6 +1402,23 @@ type GenerationState =
                           <option value={15}>15 m</option>
                           <option value={20}>20 m</option>
                           <option value={30}>30 m</option>
+                        </select>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 12 }}>
+                        <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Quality:</span>
+                        <select
+                          value={imageQuality}
+                          onChange={(e) => setImageQuality(e.target.value)}
+                          style={{
+                            ...inputStyle,
+                            flex: 1,
+                            padding: "4px 6px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <option value="high">1920×1080 (HD)</option>
+                          <option value="medium">1280×720 (balanced)</option>
+                          <option value="low">640×400 (fast)</option>
                         </select>
                       </div>
                       <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 16 }}>
