@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { useJsApiLoader } from "@react-google-maps/api";
 import { useAppState } from "../context/AppContext";
+import { useGoogleMapsLoader } from "../hooks/useGoogleMapsLoader";
 import type { WaypointWithHeading } from "../types";
 
 interface StreetViewPlayerProps {
-    routeId: string;
     denseWaypoints: WaypointWithHeading[];
-    /** Total duration in seconds of the route (used as baseline for playback) */
-    routeDuration: number;
     visible: boolean;
 }
 
@@ -19,9 +16,7 @@ interface StreetViewPlayerProps {
  * on top of this component via VideoPlayer.
  */
 export default function StreetViewPlayer({
-    routeId,
     denseWaypoints,
-    routeDuration,
     visible,
 }: StreetViewPlayerProps) {
     const {
@@ -29,7 +24,6 @@ export default function StreetViewPlayer({
       isPlaying,
       playbackRate,
       sessionElapsed,
-      effectiveSpeed,
     } = useAppState();
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -47,14 +41,8 @@ export default function StreetViewPlayer({
     playbackRateRef.current = playbackRate;
 
     // ── Load Google Maps JS API ──────────────────────────
-        // Share the loader instance with RouteCreatorPage by using the same id.
-        // Include all needed libraries so a single <script> tag is used.
-    const hasKey = !!googleApiKey;
-    const { isLoaded: mapsReady, loadError } = useJsApiLoader({
-          id: "google-maps-script",
-          googleMapsApiKey: googleApiKey || "",
-          libraries: hasKey ? ["places", "geometry", "streetView"] : [],
-        });
+    const hasKey = googleApiKey.trim().length > 0;
+    const { isLoaded: mapsReady, loadError } = useGoogleMapsLoader(googleApiKey);
 
     // ── Create StreetViewPanorama ─────────────────────────
     useEffect(() => {
@@ -91,8 +79,9 @@ export default function StreetViewPlayer({
         panoramaRef.current = panorama;
         panoCreatedRef.current = true;
         setSvError("");
-      } catch (e: any) {
-        setSvError(`Failed to create Street View: ${e.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        setSvError(`Failed to create Street View: ${message}`);
       }
 
       return () => {

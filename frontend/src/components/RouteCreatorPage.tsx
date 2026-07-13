@@ -2,11 +2,10 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import {
   GoogleMap,
   Marker as GmapsMarker,
-  useJsApiLoader,
 } from "@react-google-maps/api";
-import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { useAppState } from "../context/AppContext";
 import { useTheme } from "../context/ThemeContext";
+import { useGoogleMapsLoader } from "../hooks/useGoogleMapsLoader";
 import { saveRouteDraft, getAllRouteDrafts, deleteRouteDraft } from "../services/db";
 import {
   generateRouteVideo,
@@ -66,8 +65,6 @@ function totalDistanceKm(waypoints: Waypoint[]): number {
 
 // ── Map sub-components ─────────────────────────────────
 
-const LIBRARIES: ("places" | "geometry")[] = ["places", "geometry"];
-
 // ── Main component ────────────────────────────────────
 
 type Mode = "manual" | "auto";
@@ -123,9 +120,7 @@ type VideoMode = "static" | "live";
   // Toast
   const [toast, setToast] = useState("");
 
-  // Track if Google Maps API has been initialized
-    const mapsInitialized = useRef(false);
-    const mapRef = useRef<google.maps.Map | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
   const waypointsRef = useRef<Waypoint[]>([]);
   // Keep ref in sync
   waypointsRef.current = waypoints;
@@ -186,23 +181,12 @@ type VideoMode = "static" | "live";
           }
         }, [waypoints]);
 
-    function initGoogleMaps() {
-      if (!mapsInitialized.current && googleApiKey) {
-        setOptions({ key: googleApiKey, v: "weekly" });
-        mapsInitialized.current = true;
-      }
-    }
-
   const dist = totalDistanceKm(waypoints);
   const frameEstimate = Math.max(1, Math.round(dist * 100)); // ~10m spacing → 100 frames/km
   const costEstimate = (frameEstimate * 0.007).toFixed(2); // $7/1000
 
   // ── Google Maps JS loader ─────────────────────────────
-  const { isLoaded: gmLoaded } = useJsApiLoader({
-      id: "google-maps-script",
-      googleMapsApiKey: googleApiKey,
-      libraries: LIBRARIES,
-    });
+  const { isLoaded: gmLoaded } = useGoogleMapsLoader(googleApiKey);
 
   // ── Load saved data ──────────────────────────────────
   useEffect(() => {
@@ -288,9 +272,6 @@ type VideoMode = "static" | "live";
             if (prevIdx < 0 || nextIdx >= prevWps.length) return;
 
             try {
-              initGoogleMaps();
-              await importLibrary("routes");
-
               const ds = new google.maps.DirectionsService();
               const dirRes = await ds.route({
                 origin: prevWps[prevIdx],
@@ -364,10 +345,6 @@ type VideoMode = "static" | "live";
     setAutoRouteError("");
 
     try {
-        initGoogleMaps();
-        await importLibrary("geocoding");
-        await importLibrary("routes");
-
       // Geocode both addresses
         const geocoder = new google.maps.Geocoder();
       const [startRes, endRes] = await Promise.all([

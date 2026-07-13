@@ -22,6 +22,18 @@ export default function SettingsDialog({ open, onClose }: Props) {
   const [wsSaved, setWsSaved] = useState(false);
   const [apiKey, setApiKey] = useState(googleApiKey);
   const [apiKeySaved, setApiKeySaved] = useState(false);
+  const saveGoogleApiKey = () => {
+    const nextKey = apiKey.trim();
+    const keyChanged = nextKey !== googleApiKey;
+    localStorage.setItem("googleApiKey", nextKey);
+    setGoogleApiKey(nextKey);
+    setApiKeySaved(true);
+    if (keyChanged) {
+      window.setTimeout(() => window.location.reload(), 250);
+    } else {
+      window.setTimeout(() => setApiKeySaved(false), 1500);
+    }
+  };
   if (!open) return null;
 
   const border1 = "1px solid " + C.borderInput;
@@ -63,13 +75,13 @@ export default function SettingsDialog({ open, onClose }: Props) {
           <div>
             <label style={{ display: "block", marginBottom: 6, fontSize: 13, color: C.textSec, fontWeight: 500 }}>Google API Key</label>
             <div style={{ display: "flex", gap: 8 }}>
-              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (setGoogleApiKey(apiKey.trim()), localStorage.setItem("googleApiKey", apiKey.trim()), setApiKeySaved(true), setTimeout(() => setApiKeySaved(false), 1500))} placeholder="AIza..." style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: border1, background: C.bgInput, color: C.text, fontSize: 14 }} />
-              <button onClick={() => { setGoogleApiKey(apiKey.trim()); localStorage.setItem("googleApiKey", apiKey.trim()); setApiKeySaved(true); setTimeout(() => setApiKeySaved(false), 1500); }} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: apiKeySaved ? C.success : C.accent, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{apiKeySaved ? "✓" : "Save"}</button>
+              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveGoogleApiKey()} placeholder="AIza..." style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: border1, background: C.bgInput, color: C.text, fontSize: 14 }} />
+              <button onClick={saveGoogleApiKey} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: apiKeySaved ? C.success : C.accent, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{apiKeySaved ? "✓" : "Save"}</button>
             </div>
             <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>
-              Required for Route Creator. Enable Street View Static API, Directions API, and Geocoding API in{" "}
+              Required for Route Creator and Live Street View. Enable Maps JavaScript API, Street View Static API, Routes API, and Geocoding API with billing in{" "}
               <a href="https://console.cloud.google.com/apis" target="_blank" rel="noopener" style={{ color: "var(--accent-light)" }}>Google Cloud Console</a>.
-              Free tier: ~25K Street View views/month.
+              The page reloads after changing the key so every Google Maps request uses the saved credential.
             </div>
           </div>
           <div style={{ borderTop: border2, paddingTop: 16 }}>

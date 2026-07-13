@@ -134,9 +134,7 @@ export default function VideoPlayer() {
         {isLiveRoute ? (
                 <div style={{ aspectRatio: "16/9", position: "relative", background: "#000" }}>
                   <StreetViewPlayer
-                    routeId={currentVideo.id}
                     denseWaypoints={currentVideo.denseWaypoints || []}
-                    routeDuration={currentVideo.duration || 60}
                     visible={true}
                   />
                 </div>
