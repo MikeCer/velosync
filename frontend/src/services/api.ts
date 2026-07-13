@@ -1,4 +1,4 @@
-import type { VideoMeta, LibraryVideo, RouteVideoMeta, RouteGenerateRequest, CoverageCheckRequest, CoverageResult, CacheInfo } from "../types";
+import type { VideoMeta, LibraryVideo, RouteVideoMeta, RouteGenerateRequest, CoverageCheckRequest, CoverageResult, CacheInfo, LiveRouteSaveRequest, WaypointWithHeading } from "../types";
 
 export interface DownloadState {
   [downloadId: string]: {
@@ -95,6 +95,8 @@ export async function fetchUnifiedLibrary(): Promise<LibraryVideo[]> {
     waypoints: v.waypoints,
     distanceKm: v.distanceKm,
     description: v.description,
+    mode: v.mode,
+    denseWaypoints: v.denseWaypoints,
   }));
 }
 
@@ -184,5 +186,19 @@ export async function regenerateRouteVideo(request: RouteGenerateRequest): Promi
 
 export async function fetchCacheInfo(cacheId: string): Promise<CacheInfo> {
   const res = await apiFetch(`/api/routes/cache-info/${encodeURIComponent(cacheId)}`);
+  return res.json();
+}
+
+export async function saveLiveRoute(request: LiveRouteSaveRequest): Promise<{ id: string; duration_s: number; distance_km: number; headings: number[]; dense_waypoints: WaypointWithHeading[] }> {
+  const res = await apiFetch(`/api/routes/save-live`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  return res.json();
+}
+
+export async function fetchRouteWaypoints(routeId: string): Promise<{ route_id: string; waypoints: WaypointWithHeading[]; duration_s: number; distance_km: number }> {
+  const res = await apiFetch(`/api/routes/${encodeURIComponent(routeId)}/waypoints`);
   return res.json();
 }

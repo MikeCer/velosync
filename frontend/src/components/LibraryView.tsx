@@ -14,7 +14,19 @@ function formatDuration(sec: number | null): string {
   return `${m}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 }
 
-function SourceBadge({ source }: { source: "youtube" | "streetview" }) {
+function SourceBadge({ source, mode }: { source: "youtube" | "streetview"; mode?: "static" | "live" }) {
+  if (source === "streetview" && mode === "live") {
+    return (
+      <span style={{
+        padding: "1px 6px", borderRadius: "var(--radius-sm)",
+        background: "rgba(6,182,212,0.15)", color: "#22d3ee",
+        fontSize: 9, fontWeight: 700, textTransform: "uppercase",
+        letterSpacing: "0.04em", flexShrink: 0,
+      }}>
+        🌐 Live
+      </span>
+    );
+  }
   const colors: Record<string, { bg: string; text: string; label: string }> = {
     youtube: { bg: "rgba(239, 68, 68, 0.15)", text: "#f87171", label: "YouTube" },
     streetview: { bg: "rgba(34, 197, 94, 0.15)", text: "#4ade80", label: "Street View" },
@@ -132,7 +144,7 @@ export default function LibraryView() {
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 1 }}>
-                    <SourceBadge source={video.source} />
+                    <SourceBadge source={video.source} mode={video.mode} />
                   </div>
                   <div style={{
                     fontSize: 13, fontWeight: 500, color: "var(--text-primary)",
@@ -144,7 +156,7 @@ export default function LibraryView() {
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
                     {video.source === "streetview"
-                      ? `🚲 ${video.distanceKm?.toFixed(1) ?? "?"} km · ${video.quality}`
+                                          ? `🚲 ${video.distanceKm?.toFixed(1) ?? "?"} km · ${video.mode === "live" ? "🌐 Live" : video.quality}`
                       : `${video.quality} · ${formatSize(video.fileSize)}`
                     }
                     {video.description ? ` — ${video.description}` : ""}

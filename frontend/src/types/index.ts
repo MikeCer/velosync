@@ -19,6 +19,8 @@ export interface LibraryVideo {
   waypoints?: Waypoint[];
   distanceKm?: number;
   description?: string;
+  mode?: "static" | "live";
+  denseWaypoints?: WaypointWithHeading[];
 }
 
 export interface DownloadItem {
@@ -64,6 +66,21 @@ export interface RouteVideoMeta {
   source: "streetview";
   spacing_m?: number;
   cache_id?: string;
+  mode?: "static" | "live";
+  /** When mode is "live", these are included */
+  dense_waypoints?: WaypointWithHeading[];
+}
+
+export interface WaypointWithHeading {
+  lat: number;
+  lng: number;
+  heading: number;
+}
+
+export interface LiveRouteSaveRequest {
+  waypoints: Waypoint[];
+  route_name: string;
+  description: string;
 }
 
 export interface RouteGenerateRequest {

@@ -17,7 +17,9 @@ export function useSessionTimer() {
     playlist,
     currentVideoIndex,
     activeRoute,
-  } = useAppState();
+      setIsPlaying,
+      setCurrentVideoIndex,
+    } = useAppState();
 
   const intervalRef = useRef<number | null>(null);
   const sessionRef = useRef({ start: 0, distance: 0, hrSamples: [] as number[] });
@@ -36,7 +38,16 @@ export function useSessionTimer() {
         if (heartRate !== null) {
           sessionRef.current.hrSamples.push(heartRate);
         }
-      }, 1000);
+
+              // Auto-stop when a live route reaches its duration
+              const currentVideo = playlist[currentVideoIndex];
+              if (currentVideo?.mode === "live" && currentVideo.duration && elapsed >= currentVideo.duration) {
+                setIsPlaying(false);
+                if (currentVideoIndex < playlist.length - 1) {
+                  setCurrentVideoIndex(currentVideoIndex + 1);
+                }
+              }
+            }, 1000);
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);

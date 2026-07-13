@@ -15,6 +15,7 @@ import {
   subscribeRouteProgress,
   checkRouteCoverage,
   regenerateRouteVideo,
+  saveLiveRoute,
   type RouteProgressState,
 } from "../services/api";
 import type { Waypoint, RouteDraft, RouteVideoMeta, LibraryVideo, CoverageResult } from "../types";
@@ -75,6 +76,9 @@ type GenerationState =
   | { phase: "idle" }
   | { phase: "generating"; genId: string; percent: number; status: string };
 
+/** Whether the route should be pre-rendered as static MP4 or streamed live via panorama */
+type VideoMode = "static" | "live";
+
   // Module-level state to persist generation progress across tab switches
   let activeGenId: string | null = null;
   let activeGenName: string | null = null;
@@ -85,6 +89,7 @@ type GenerationState =
   const isDark = theme === "dark";
 
   const [mode, setMode] = useState<Mode>("manual");
+  const [videoMode, setVideoMode] = useState<VideoMode>("static");
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [routeName, setRouteName] = useState("");
   const [description, setDescription] = useState("");
@@ -556,10 +561,48 @@ type GenerationState =
         waypoints: video.waypoints,
         distanceKm: video.distance_km,
         description: video.description,
+          mode: video.mode || "static",
+          denseWaypoints: video.dense_waypoints,
+        };
+        setLibrary([...library, libItem]);
+        setRouteVideos([...localRouteVideos, video]);
+        setActivePage("training");
       };
-      setLibrary([...library, libItem]);
-      setRouteVideos([...localRouteVideos, video]);
-      setActivePage("training");
+
+    const handleSaveLiveRoute = async () => {
+      if (waypoints.length < 2 || !routeName.trim()) return;
+      try {
+        const result = await saveLiveRoute({
+          waypoints,
+          route_name: routeName.trim(),
+          description: description.trim(),
+        });
+        // Add as a live library item
+        const libItem: LibraryVideo = {
+          id: result.id,
+          title: routeName.trim(),
+          filename: "", // No MP4 file
+          duration: result.duration_s,
+          thumbnail: null,
+          quality: "streetview",
+          fileSize: 0,
+          downloadedAt: Date.now(),
+          youtubeUrl: "",
+          source: "streetview" as const,
+          waypoints,
+          distanceKm: result.distance_km,
+          description: description.trim(),
+          mode: "live",
+          denseWaypoints: result.dense_waypoints,
+        };
+        setLibrary([...library, libItem]);
+        // Refresh route library
+        fetchRouteLibrary().then(setLocalRouteVideos).catch(() => {});
+        setToast("✅ Live route saved! Switch to Training to ride.");
+        setActivePage("training");
+      } catch (err: any) {
+        setToast(`❌ ${err.message || "Failed to save live route"}`);
+      }
     };
 
   // ── Auto-clear toast ─────────────────────────────────
@@ -664,6 +707,42 @@ type GenerationState =
             🧭 Auto-Route
           </button>
         </div>
+
+                {/* Video mode toggle */}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={() => setVideoMode("static")}
+                    style={{
+                      flex: 1,
+                      padding: "6px 0",
+                      borderRadius: "var(--radius-md)",
+                      border: videoMode === "static" ? "2px solid #8b5cf6" : "1px solid var(--glass-border)",
+                      background: videoMode === "static" ? "rgba(139,92,246,0.1)" : "transparent",
+                      color: videoMode === "static" ? "#a78bfa" : "var(--text-secondary)",
+                      cursor: "pointer",
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}
+                  >
+                    📼 Static Video (MP4)
+                  </button>
+                  <button
+                    onClick={() => setVideoMode("live")}
+                    style={{
+                      flex: 1,
+                      padding: "6px 0",
+                      borderRadius: "var(--radius-md)",
+                      border: videoMode === "live" ? "2px solid #06b6d4" : "1px solid var(--glass-border)",
+                      background: videoMode === "live" ? "rgba(6,182,212,0.1)" : "transparent",
+                      color: videoMode === "live" ? "#22d3ee" : "var(--text-secondary)",
+                      cursor: "pointer",
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}
+                  >
+                    🌐 Live Panorama
+                  </button>
+                </div>
 
         {/* Manual mode controls */}
         {mode === "manual" && (
@@ -924,93 +1003,116 @@ type GenerationState =
             </div>
           ) : (
             <>
-                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                          <span style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-                            Spacing:
-                          </span>
-                          <select
-                            value={frameSpacing}
-                            onChange={(e) => setFrameSpacing(Number(e.target.value))}
-                            style={{
-                              ...inputStyle,
-                              flex: 1,
-                              padding: "4px 6px",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <option value={5}>5 m (smoother, more data)</option>
-                            <option value={10}>10 m (default)</option>
-                            <option value={15}>15 m</option>
-                            <option value={20}>20 m</option>
-                            <option value={30}>30 m (faster, less data)</option>
-                          </select>
-                        </div>
-                                                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                                                  <span style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-                                                    Quality:
-                                                  </span>
-                                                  <select
-                                                    value={imageQuality}
-                                                    onChange={(e) => setImageQuality(e.target.value)}
-                                                    style={{
-                                                      ...inputStyle,
-                                                      flex: 1,
-                                                      padding: "4px 6px",
-                                                      cursor: "pointer",
-                                                    }}
-                                                  >
-                                                    <option value="high">1920×1080 (HD, higher API cost)</option>
-                                                    <option value="medium">1280×720 (balanced)</option>
-                                                    <option value="low">640×400 (fast, lower cost)</option>
-                                                  </select>
-                                                </div>
-                        <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>
-                          Est. frames: ~{Math.round(dist * 1000 / (frameSpacing || 1))}  ·  Est. data: ~{Math.round(dist * 1000 / (frameSpacing || 1) * 0.15)} MB
-                        </div>
+                        {videoMode === "static" ? (
+                          <>
+                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <span style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                                Spacing:
+                              </span>
+                              <select
+                                value={frameSpacing}
+                                onChange={(e) => setFrameSpacing(Number(e.target.value))}
+                                style={{
+                                  ...inputStyle,
+                                  flex: 1,
+                                  padding: "4px 6px",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <option value={5}>5 m (smoother, more data)</option>
+                                <option value={10}>10 m (default)</option>
+                                <option value={15}>15 m</option>
+                                <option value={20}>20 m</option>
+                                <option value={30}>30 m (faster, less data)</option>
+                              </select>
+                            </div>
+                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <span style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                                Quality:
+                              </span>
+                              <select
+                                value={imageQuality}
+                                onChange={(e) => setImageQuality(e.target.value)}
+                                style={{
+                                  ...inputStyle,
+                                  flex: 1,
+                                  padding: "4px 6px",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <option value="high">1920×1080 (HD, higher API cost)</option>
+                                <option value="medium">1280×720 (balanced)</option>
+                                <option value="low">640×400 (fast, lower cost)</option>
+                              </select>
+                            </div>
+                            <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>
+                              Est. frames: ~{Math.round(dist * 1000 / (frameSpacing || 1))}  ·  Est. data: ~{Math.round(dist * 1000 / (frameSpacing || 1) * 0.15)} MB
+                            </div>
 
-                                                {/* Coverage check */}
-                                                <button
-                                                  onClick={handleCheckCoverage}
-                                                  disabled={coverageChecking || waypoints.length < 2 || !googleApiKey}
-                                                  style={{
-                                                    ...btnSecondary,
-                                                    opacity: coverageChecking || waypoints.length < 2 || !googleApiKey ? 0.5 : 1,
-                                                    fontSize: 12,
-                                                    padding: "8px 12px",
-                                                  }}
-                                                >
-                                                  {coverageChecking ? "🔍 Checking…" : "🔍 Check Street View Coverage"}
-                                                </button>
-                                                {coverageResult && (
-                                                  <div
-                                                    style={{
-                                                      fontSize: 11,
-                                                      padding: "6px 8px",
-                                                      borderRadius: "var(--radius-sm)",
-                                                      background: coverageResult.uncovered.length > 0
-                                                        ? isDark ? "#422" : "#fee2e2"
-                                                        : isDark ? "#242" : "#dcfce7",
-                                                      color: coverageResult.uncovered.length > 0
-                                                        ? isDark ? "#fca5a5" : "#991b1b"
-                                                        : isDark ? "#86efac" : "#166534",
-                                                    }}
-                                                  >
-                                                    {coverageResult.uncovered.length > 0
-                                                      ? `⚠️ ${coverageResult.uncovered.length} of ${coverageResult.total} checkpoints lack Street View coverage. You may still try generating.`
-                                                      : `✅ All ${coverageResult.total} checkpoints have coverage!`}
-                                                  </div>
-                                                )}
+                            {/* Coverage check */}
+                            <button
+                              onClick={handleCheckCoverage}
+                              disabled={coverageChecking || waypoints.length < 2 || !googleApiKey}
+                              style={{
+                                ...btnSecondary,
+                                opacity: coverageChecking || waypoints.length < 2 || !googleApiKey ? 0.5 : 1,
+                                fontSize: 12,
+                                padding: "8px 12px",
+                              }}
+                            >
+                              {coverageChecking ? "🔍 Checking…" : "🔍 Check Street View Coverage"}
+                            </button>
+                            {coverageResult && (
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  padding: "6px 8px",
+                                  borderRadius: "var(--radius-sm)",
+                                  background: coverageResult.uncovered.length > 0
+                                    ? isDark ? "#422" : "#fee2e2"
+                                    : isDark ? "#242" : "#dcfce7",
+                                  color: coverageResult.uncovered.length > 0
+                                    ? isDark ? "#fca5a5" : "#991b1b"
+                                    : isDark ? "#86efac" : "#166534",
+                                }}
+                              >
+                                {coverageResult.uncovered.length > 0
+                                  ? `⚠️ ${coverageResult.uncovered.length} of ${coverageResult.total} checkpoints lack Street View coverage. You may still try generating.`
+                                  : `✅ All ${coverageResult.total} checkpoints have coverage!`}
+                              </div>
+                            )}
 
-                                                <button
-                                                  onClick={handleGenerate}
-                                                  disabled={waypoints.length < 2 || !routeName.trim() || !googleApiKey}
-                                                  style={{
-                                                    ...btnPrimary,
-                                                    opacity: waypoints.length < 2 || !routeName.trim() || !googleApiKey ? 0.5 : 1,
-                                                  }}
-                                                >
-                                                  🎬 Generate Street View Video
-                                                </button>
+                            <button
+                              onClick={handleGenerate}
+                              disabled={waypoints.length < 2 || !routeName.trim() || !googleApiKey}
+                              style={{
+                                ...btnPrimary,
+                                opacity: waypoints.length < 2 || !routeName.trim() || !googleApiKey ? 0.5 : 1,
+                              }}
+                            >
+                              🎬 Generate Street View Video
+                            </button>
+                          </>
+                        ) : (
+                          /* Live panorama mode — simple save */
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            <p style={{ fontSize: 11, color: "var(--text-secondary)", margin: 0 }}>
+                              🌐 Live mode streams Google Street View panorama in real-time during training.
+                              No pre-rendering needed — requires internet connection during your ride.
+                            </p>
+                            <button
+                              onClick={handleSaveLiveRoute}
+                              disabled={waypoints.length < 2 || !routeName.trim()}
+                              style={{
+                                ...btnPrimary,
+                                background: "linear-gradient(135deg, #06b6d4, #0891b2)",
+                                opacity: waypoints.length < 2 || !routeName.trim() ? 0.5 : 1,
+                              }}
+                            >
+                              🌐 Save Live Route
+                            </button>
+                          </div>
+                        )}
               <button
                 onClick={handleSaveDraft}
                 disabled={waypoints.length < 2}

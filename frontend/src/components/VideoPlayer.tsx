@@ -5,6 +5,7 @@ import SpeedDisplay from "./SpeedDisplay";
 import SpeedSlider from "./SpeedSlider";
 import AudioControl from "./AudioControl";
 import HudOverlay from "./HudOverlay";
+import StreetViewPlayer from "./StreetViewPlayer";
 
 export default function VideoPlayer() {
   const { playlist, currentVideoIndex, playbackRate, isPlaying, setIsPlaying, setCurrentVideoIndex, effectiveSpeed } = useAppState();
@@ -21,6 +22,7 @@ export default function VideoPlayer() {
   const hideTimerRef = useRef<number | null>(null);
 
   const currentVideo = playlist[currentVideoIndex];
+  const isLiveRoute = currentVideo?.mode === "live" && currentVideo?.source === "streetview";
 
   useEffect(() => {
     const video = videoRef.current;
@@ -93,12 +95,21 @@ export default function VideoPlayer() {
     }, []);
 
   const handleEnded = useCallback(() => {
-    if (currentVideoIndex < playlist.length - 1) {
-      setCurrentVideoIndex(currentVideoIndex + 1);
-    } else {
-      setIsPlaying(false);
-    }
-  }, [currentVideoIndex, playlist.length, setCurrentVideoIndex, setIsPlaying]);
+      if (isLiveRoute) {
+        // Live route ended — move to next in playlist
+        if (currentVideoIndex < playlist.length - 1) {
+          setCurrentVideoIndex(currentVideoIndex + 1);
+        } else {
+          setIsPlaying(false);
+        }
+        return;
+      }
+      if (currentVideoIndex < playlist.length - 1) {
+        setCurrentVideoIndex(currentVideoIndex + 1);
+      } else {
+        setIsPlaying(false);
+      }
+    }, [currentVideoIndex, playlist.length, setCurrentVideoIndex, setIsPlaying, isLiveRoute]);
 
   if (!currentVideo) {
     return (
@@ -111,7 +122,7 @@ export default function VideoPlayer() {
     );
   }
 
-  const src = getMediaUrl(currentVideo.filename);
+    const src = isLiveRoute ? "" : getMediaUrl(currentVideo.filename);
 
   return (
     <div
@@ -120,14 +131,25 @@ export default function VideoPlayer() {
       onTouchStart={handleMouseMove}
       style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#000" }}
     >
-      <video
-        ref={videoRef}
-        src={src}
-        controls={false}
-        playsInline
-        onEnded={handleEnded}
-              style={{ width: "100%", display: "block", aspectRatio: "16/9", objectFit: "contain", background: "#000" }}
-      />
+        {isLiveRoute ? (
+                <div style={{ aspectRatio: "16/9", position: "relative", background: "#000" }}>
+                  <StreetViewPlayer
+                    routeId={currentVideo.id}
+                    denseWaypoints={currentVideo.denseWaypoints || []}
+                    routeDuration={currentVideo.duration || 60}
+                    visible={true}
+                  />
+                </div>
+              ) : (
+                <video
+                  ref={videoRef}
+                  src={src}
+                  controls={false}
+                  playsInline
+                  onEnded={handleEnded}
+                  style={{ width: "100%", display: "block", aspectRatio: "16/9", objectFit: "contain", background: "#000" }}
+                />
+              )}
 
       {/* Persistent speed gauge in top-left (fullscreen only) */}
       {isFullscreen && showSpeedGauge && (
@@ -173,9 +195,9 @@ export default function VideoPlayer() {
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ opacity: 0.9, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 300 }}>
-                {currentVideoIndex + 1}/{playlist.length} — {currentVideo.title}
+                            {isLiveRoute && "🌐 "}{currentVideoIndex + 1}/{playlist.length} — {currentVideo.title}
               </span>
-              <AudioControl videoRef={videoRef} compact />
+                          {!isLiveRoute && <AudioControl videoRef={videoRef} compact />}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               {currentVideoIndex > 0 && (
@@ -227,9 +249,15 @@ export default function VideoPlayer() {
             position: "absolute", top: 12, left: 12, padding: "6px 14px", borderRadius: 8,
             background: "rgba(0,0,0,0.75)", color: "#fff", fontSize: 14, fontWeight: 500,
             maxWidth: "70%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>
-            {currentVideoIndex + 1} / {playlist.length} — {currentVideo.title}
-          </div>
+                  display: "flex", alignItems: "center", gap: 6,
+                }}>
+                  {isLiveRoute && (
+                    <span style={{ fontSize: 10, color: "#22d3ee", fontWeight: 700 }}>🌐 LIVE</span>
+                  )}
+                  <span>
+                    {currentVideoIndex + 1} / {playlist.length} — {currentVideo.title}
+                  </span>
+                </div>
           <div style={{ display: "flex", gap: 8, position: "absolute", bottom: 16, right: 16 }}>
             {currentVideoIndex > 0 && (
               <button onClick={() => setCurrentVideoIndex(currentVideoIndex - 1)}
