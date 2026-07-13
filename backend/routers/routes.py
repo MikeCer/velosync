@@ -91,83 +91,89 @@ async def delete_route(route_id: str):
     return {"ok": True}
 
 
-    @router.post("/save-live")
-    async def save_live_route(body: LiveRouteSaveRequest):
-        """Save a route for live Street View streaming — no video generation."""
-        import uuid
+@router.post("/save-live")
+async def save_live_route(body: LiveRouteSaveRequest):
+    """Save a route for live Street View streaming — no video generation."""
+    import uuid as _uuid
 
-        route_id = uuid.uuid4().hex[:12]
+    route_id = _uuid.uuid4().hex[:12]
 
-        # Interpolate waypoints and compute headings
-        dense = geo.interpolate_waypoints(body.waypoints, spacing_m=body.spacing_m)
-        total_km = geo.total_distance_km(dense)
+    # Interpolate waypoints and compute headings
+    dense = geo.interpolate_waypoints(body.waypoints, spacing_m=body.spacing_m)
+    total_km = geo.total_distance_km(dense)
 
-        headings: list[float] = []
-        for idx, wp in enumerate(dense):
-            if idx < len(dense) - 1:
-                h = geo.bearing(wp.lat, wp.lng, dense[idx + 1].lat, dense[idx + 1].lng)
-            else:
-                h = geo.bearing(dense[idx - 1].lat, dense[idx - 1].lng, wp.lat, wp.lng)
-            headings.append(round(h, 1))
+    headings: list[float] = []
+    for idx, wp in enumerate(dense):
+        if idx < len(dense) - 1:
+            h = geo.bearing(wp.lat, wp.lng, dense[idx + 1].lat, dense[idx + 1].lng)
+        else:
+            h = geo.bearing(dense[idx - 1].lat, dense[idx - 1].lng, wp.lat, wp.lng)
+        headings.append(round(h, 1))
 
-        waypoint_dicts = [{"lat": w.lat, "lng": w.lng} for w in body.waypoints]
-        dense_dicts = [{"lat": w.lat, "lng": w.lng} for w in dense]
+    waypoint_dicts = [{"lat": w.lat, "lng": w.lng} for w in body.waypoints]
+    dense_dicts = [{"lat": w.lat, "lng": w.lng} for w in dense]
 
-        entry = persistence.save_live_route(
-            route_id=route_id,
-            name=body.route_name,
-            description=body.description,
-            waypoints=waypoint_dicts,
-            dense_waypoints=dense_dicts,
-            headings=headings,
-            spacing_m=body.spacing_m,
-            total_km=total_km,
-        )
+    entry = persistence.save_live_route(
+        route_id=route_id,
+        name=body.route_name,
+        description=body.description,
+        waypoints=waypoint_dicts,
+        dense_waypoints=dense_dicts,
+        headings=headings,
+        spacing_m=body.spacing_m,
+        total_km=total_km,
+    )
 
-        # Save the dense data to routes cache so regeneration can use it
-        import json
-        cache_file = ROUTES_CACHE / f"{route_id}.json"
-        cache_file.write_text(json.dumps({
-            "route_name": body.route_name,
-            "description": body.description,
-            "spacing_m": body.spacing_m,
-            "original_waypoints": waypoint_dicts,
-            "dense_waypoints": dense_dicts,
-            "headings": headings,
-        }, indent=2, ensure_ascii=False), encoding="utf-8")
+    # Save the dense data to routes cache so regeneration can use it
+    import json as _json
+    cache_file = ROUTES_CACHE / f"{route_id}.json"
+    cache_file.write_text(_json.dumps({
+        "route_name": body.route_name,
+        "description": body.description,
+        "spacing_m": body.spacing_m,
+        "original_waypoints": waypoint_dicts,
+        "dense_waypoints": dense_dicts,
+        "headings": headings,
+    }, indent=2, ensure_ascii=False), encoding="utf-8")
 
-        return {
-            "route_id": route_id,
-            "status": "saved",
-            "total_frames": len(dense),
-            "total_km": total_km,
-            "distance_km": total_km,
-            "duration_s": len(dense),
-        }
+    return {
+        "id": route_id,
+        "status": "saved",
+        "total_frames": len(dense),
+        "total_km": total_km,
+        "distance_km": total_km,
+        "duration_s": len(dense),
+        "dense_waypoints": [
+            {"lat": w["lat"], "lng": w["lng"], "heading": headings[i]
+             if i < len(headings) else 0}
+            for i, w in enumerate(dense_dicts)
+        ],
+        "headings": headings,
+    }
 
 
-    @router.get("/{route_id}/waypoints")
-    async def get_route_waypoints(route_id: str):
-        """Return dense waypoints with headings for live Street View playback."""
-        entry = persistence.find_route_meta(route_id)
-        if not entry:
-            raise HTTPException(status_code=404, detail="Route not found")
+@router.get("/{route_id}/waypoints")
+async def get_route_waypoints(route_id: str):
+    """Return dense waypoints with headings for live Street View playback."""
+    entry = persistence.find_route_meta(route_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Route not found")
 
-        return {
-            "route_id": route_id,
-            "waypoints": [
-                {
-                    "lat": w["lat"],
-                    "lng": w["lng"],
-                    "heading": entry.get("headings", [0] * len(entry.get("dense_waypoints", [])))[i]
-                    if i < len(entry.get("headings", [])) else 0,
-                }
-                for i, w in enumerate(entry.get("dense_waypoints", []))
-            ],
-            "spacing_m": entry.get("spacing_m", 10.0),
-            "distance_km": entry.get("distance_km", 0),
-            "duration_s": entry.get("duration_s", 0),
-        }
+    return {
+        "route_id": route_id,
+        "waypoints": [
+            {
+                "lat": w["lat"],
+                "lng": w["lng"],
+                "heading": entry.get("headings", [0] * len(entry.get("dense_waypoints", [])))[i]
+                if i < len(entry.get("headings", [])) else 0,
+            }
+            for i, w in enumerate(entry.get("dense_waypoints", []))
+        ],
+        "spacing_m": entry.get("spacing_m", 10.0),
+        "distance_km": entry.get("distance_km", 0),
+        "duration_s": entry.get("duration_s", 0),
+    }
 
 
 @router.post("/regenerate")
