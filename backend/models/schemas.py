@@ -35,7 +35,6 @@ class RouteGenerateRequest(BaseModel):
     description: str = ""
     api_key: str
     spacing_m: float = 10.0
-    quality: str = "high"
     cached_route_id: Optional[str] = None  # If regenerating from cached route
 
 

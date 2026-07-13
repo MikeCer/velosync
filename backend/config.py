@@ -13,12 +13,10 @@ ROUTES_CACHE.mkdir(parents=True, exist_ok=True)
 FRAMES_CACHE = MEDIA_FOLDER / "frames_cache"
 FRAMES_CACHE.mkdir(parents=True, exist_ok=True)
 
-# Street View image quality → Google Static API `size` parameter
-QUALITY_SIZE_MAP: dict[str, str] = {
-    "high": "1920x1080",
-    "medium": "1280x720",
-    "low": "640x400",
-}
+# Static Street View capture and video output settings.
+STREETVIEW_STATIC_SIZE = "600x300"
+STREETVIEW_STATIC_FOV = 120
+STREETVIEW_OUTPUT_SIZE = "1280x720"
 
 # YouTube download quality → yt-dlp format string
 QUALITY_MAP: dict[str, str] = {

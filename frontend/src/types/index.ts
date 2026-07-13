@@ -89,7 +89,6 @@ export interface RouteGenerateRequest {
   description: string;
   api_key: string;
   spacing_m: number;
-  quality?: string;
   cached_route_id?: string;
 }
 

@@ -7,7 +7,14 @@ import tempfile
 import time
 from pathlib import Path
 
-from backend.config import FRAMES_CACHE, MEDIA_FOLDER, QUALITY_SIZE_MAP, ROUTES_CACHE
+from backend.config import (
+    FRAMES_CACHE,
+    MEDIA_FOLDER,
+    ROUTES_CACHE,
+    STREETVIEW_OUTPUT_SIZE,
+    STREETVIEW_STATIC_FOV,
+    STREETVIEW_STATIC_SIZE,
+)
 from backend.models.schemas import Waypoint, RouteGenerateRequest
 from backend.services.geo import bearing, interpolate_waypoints, total_distance_km
 from backend.services.persistence import add_route_meta
@@ -17,12 +24,72 @@ logger = logging.getLogger(__name__)
 
 # ── Frame caching helpers ───────────────────────────────
 
-def _frame_cache_key(lat: float, lng: float, heading: float, quality: str = "high") -> str:
-    return f"{round(lat, 5)}_{round(lng, 5)}_{round(heading, 0)}_{quality}.jpg"
+def _frame_cache_key(lat: float, lng: float, heading: float) -> str:
+    capture_spec = f"{STREETVIEW_STATIC_SIZE}_fov{STREETVIEW_STATIC_FOV}"
+    return f"{round(lat, 5)}_{round(lng, 5)}_{round(heading, 0)}_{capture_spec}.jpg"
 
 
-def _cached_frame_path(lat: float, lng: float, heading: float, quality: str = "high") -> Path:
-    return FRAMES_CACHE / _frame_cache_key(lat, lng, heading, quality)
+def _cached_frame_path(lat: float, lng: float, heading: float) -> Path:
+    return FRAMES_CACHE / _frame_cache_key(lat, lng, heading)
+
+
+def _streetview_image_url(
+    waypoint: Waypoint,
+    heading: float,
+    api_key: str,
+) -> str:
+    return (
+        "https://maps.googleapis.com/maps/api/streetview"
+        f"?location={waypoint.lat},{waypoint.lng}"
+        f"&size={STREETVIEW_STATIC_SIZE}"
+        f"&heading={heading:.1f}"
+        f"&fov={STREETVIEW_STATIC_FOV}"
+        "&pitch=0"
+        f"&key={api_key}"
+    )
+
+
+def _ffmpeg_command(
+    concat_file: Path,
+    output_file: Path,
+    frame_count: int,
+) -> list[str]:
+    output_width, output_height = STREETVIEW_OUTPUT_SIZE.split("x", maxsplit=1)
+    video_filter = (
+        # 600x300 is 2:1, so crop its sides precisely before scaling to 16:9.
+        "crop=trunc(ih*16/9/2)*2:trunc(ih/2)*2:(iw-ow)/2:0,"
+        f"scale={output_width}:{output_height}:flags=lanczos:in_range=full:out_range=tv,"
+        "setsar=1,"
+        "setparams=range=limited:color_primaries=bt709:color_trc=bt709:colorspace=bt709,"
+        # Blend between one-second source frames before producing 30 fps.
+        "tpad=stop_mode=clone:stop_duration=1,"
+        "minterpolate=fps=30:mi_mode=blend,"
+        # Restore a small amount of detail after upscaling without halos.
+        "unsharp=5:5:0.35:5:5:0.0,"
+        "format=yuv420p"
+    )
+    return [
+        "ffmpeg", "-y",
+        "-f", "concat", "-safe", "0",
+        "-i", str(concat_file),
+        "-vf", video_filter,
+        "-t", str(frame_count),
+        "-fps_mode", "cfr",
+        "-c:v", "libx264",
+        "-preset", "slow",
+        "-crf", "18",
+        "-profile:v", "high",
+        "-level", "4.1",
+        "-g", "60",
+        "-keyint_min", "30",
+        "-sc_threshold", "0",
+        "-color_range", "tv",
+        "-color_primaries", "bt709",
+        "-color_trc", "bt709",
+        "-colorspace", "bt709",
+        "-movflags", "+faststart",
+        str(output_file),
+    ]
 
 
 # ── Internal helpers ────────────────────────────────────
@@ -99,9 +166,6 @@ def run_route_generation(
         cached_count = 0
         downloaded_count = 0
 
-        quality = getattr(req, "quality", "high") or "high"
-        image_size = QUALITY_SIZE_MAP.get(quality, QUALITY_SIZE_MAP["high"])
-
         for idx, wp in enumerate(dense):
             # Compute heading to next point (or use previous heading for last)
             if idx < len(dense) - 1:
@@ -110,20 +174,12 @@ def run_route_generation(
                 heading_val = bearing(dense[idx - 1].lat, dense[idx - 1].lng, wp.lat, wp.lng)
 
             # Check frame cache first
-            cached_frame = _cached_frame_path(wp.lat, wp.lng, heading_val, quality)
+            cached_frame = _cached_frame_path(wp.lat, wp.lng, heading_val)
             if cached_frame.exists():
                 frame_paths.append(cached_frame)
                 cached_count += 1
             else:
-                url = (
-                    f"https://maps.googleapis.com/maps/api/streetview"
-                    f"?location={wp.lat},{wp.lng}"
-                    f"&size={image_size}"
-                    f"&heading={heading_val:.1f}"
-                    f"&fov=120"
-                    f"&pitch=0"
-                    f"&key={req.api_key}"
-                )
+                url = _streetview_image_url(wp, heading_val, req.api_key)
 
                 try:
                     resp = httpx.get(url, timeout=30, follow_redirects=True)
@@ -180,27 +236,17 @@ def run_route_generation(
         route_id = gen_id[:12]
         output_file = MEDIA_FOLDER / f"route_{route_id}.mp4"
 
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "concat", "-safe", "0",
-            "-i", str(concat_file),
-            "-vsync", "vfr",
-            "-vf", (
-                "crop=iw*0.75:ih:iw*0.125:0,"
-                "scale=1920:1080,setsar=1,"
-                "fps=30,"
-                "minterpolate=fps=30:mi_mode=blend:me_mode=bidir:vsbmc=1"
-            ),
-            "-pix_fmt", "yuv420p",
-            "-c:v", "libx264",
-            "-preset", "medium",
-            "-crf", "23",
-            str(output_file),
-        ]
+        cmd = _ffmpeg_command(concat_file, output_file, len(frame_paths))
 
         active_route_generations[gen_id]["percent"] = 80
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        encode_timeout = max(600, len(frame_paths) * 5)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=encode_timeout,
+        )
         if result.returncode != 0:
             logger.error(f"FFmpeg failed: {result.stderr}")
             active_route_generations[gen_id] = {
@@ -224,9 +270,12 @@ def run_route_generation(
             "file_size": output_file.stat().st_size if output_file.exists() else 0,
             "generated_at": time.time(),
             "source": "streetview",
-                        "mode": "static",
-                        "spacing_m": req.spacing_m,
-                        "cache_id": gen_id,
+            "mode": "static",
+            "spacing_m": req.spacing_m,
+            "cache_id": gen_id,
+            "capture_size": STREETVIEW_STATIC_SIZE,
+            "fov": STREETVIEW_STATIC_FOV,
+            "output_resolution": STREETVIEW_OUTPUT_SIZE,
         }
         add_route_meta(entry)
 

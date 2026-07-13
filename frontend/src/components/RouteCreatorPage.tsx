@@ -99,9 +99,8 @@ type VideoMode = "static" | "live";
   const [autoRouting, setAutoRouting] = useState(false);
   const [autoRouteError, setAutoRouteError] = useState("");
     const [travelMode, setTravelMode] = useState<string>("WALKING");
-  const [frameSpacing, setFrameSpacing] = useState(10);  // meters between frames
-    const [imageQuality, setImageQuality] = useState("high");  // Street View image resolution
-    const [coverageChecking, setCoverageChecking] = useState(false);
+    const [frameSpacing, setFrameSpacing] = useState(10);  // meters between frames
+      const [coverageChecking, setCoverageChecking] = useState(false);
     const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
     const [showRegenDialog, setShowRegenDialog] = useState(false);
     const [regenTarget, setRegenTarget] = useState<RouteVideoMeta | null>(null);
@@ -456,7 +455,6 @@ type VideoMode = "static" | "live";
           description: description.trim(),
           api_key: googleApiKey,
           spacing_m: frameSpacing,
-          quality: imageQuality,
         });
         activeGenId = generation_id;
         activeGenName = routeName.trim();
@@ -499,7 +497,6 @@ type VideoMode = "static" | "live";
           description: regenTarget.description || "",
           api_key: googleApiKey,
           spacing_m: frameSpacing,
-          quality: imageQuality,
           cached_route_id: regenTarget.cache_id,
         });
         activeGenId = generation_id;
@@ -1004,27 +1001,11 @@ type VideoMode = "static" | "live";
                                 <option value={30}>30 m (faster, less data)</option>
                               </select>
                             </div>
-                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                              <span style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-                                Quality:
-                              </span>
-                              <select
-                                value={imageQuality}
-                                onChange={(e) => setImageQuality(e.target.value)}
-                                style={{
-                                  ...inputStyle,
-                                  flex: 1,
-                                  padding: "4px 6px",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <option value="high">1920×1080 (HD, higher API cost)</option>
-                                <option value="medium">1280×720 (balanced)</option>
-                                <option value="low">640×400 (fast, lower cost)</option>
-                              </select>
+                            <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>
+                              Fixed capture: 600×300 · 120° FOV · optimized 16:9 output
                             </div>
                             <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>
-                              Est. frames: ~{Math.round(dist * 1000 / (frameSpacing || 1))}  ·  Est. data: ~{Math.round(dist * 1000 / (frameSpacing || 1) * 0.15)} MB
+                              Est. frames: ~{Math.round(dist * 1000 / (frameSpacing || 1))}  ·  Est. data: ~{Math.round(dist * 1000 / (frameSpacing || 1) * 0.05)} MB
                             </div>
 
                             {/* Coverage check */}
@@ -1463,7 +1444,7 @@ type VideoMode = "static" | "live";
                         🔄 Regenerate Video
                       </h3>
                       <p style={{ margin: "0 0 16px", color: "var(--text-secondary)", fontSize: 13 }}>
-                        Regenerate <strong>{regenTarget.name}</strong> with new settings. Cached Street View images will be reused — no new API costs.
+                        Regenerate <strong>{regenTarget.name}</strong> with fixed 600×300, 120° FOV capture and optimized 16:9 encoding. Compatible cached images will be reused.
                       </p>
                       <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 12 }}>
                         <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Spacing:</span>
@@ -1484,22 +1465,8 @@ type VideoMode = "static" | "live";
                           <option value={30}>30 m</option>
                         </select>
                       </div>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 12 }}>
-                        <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Quality:</span>
-                        <select
-                          value={imageQuality}
-                          onChange={(e) => setImageQuality(e.target.value)}
-                          style={{
-                            ...inputStyle,
-                            flex: 1,
-                            padding: "4px 6px",
-                            cursor: "pointer",
-                          }}
-                        >
-                          <option value="high">1920×1080 (HD)</option>
-                          <option value="medium">1280×720 (balanced)</option>
-                          <option value="low">640×400 (fast)</option>
-                        </select>
+                      <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 12 }}>
+                        Capture: 600×300 · FOV 120° · Output: 1280×720
                       </div>
                       <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 16 }}>
                         Original: {regenTarget.spacing_m != null ? `${regenTarget.spacing_m} m` : "unknown"}  · {regenTarget.distance_km.toFixed(1)} km  · Cache: {regenTarget.cache_id ? regenTarget.cache_id.slice(0, 8) : "N/A"}
