@@ -4,195 +4,304 @@ import { useGoogleMapsLoader } from "../hooks/useGoogleMapsLoader";
 import type { WaypointWithHeading } from "../types";
 
 interface StreetViewPlayerProps {
-    denseWaypoints: WaypointWithHeading[];
-    fullscreen: boolean;
-    visible: boolean;
+  denseWaypoints: WaypointWithHeading[];
+  fullscreen: boolean;
+  visible: boolean;
 }
 
-/**
- * Renders a Google StreetViewPanorama and advances programmatically
- * through a sequence of waypoints at the effective playback rate.
- *
- * All HUD overlays, fullscreen, and queue controls mount identically
- * on top of this component via VideoPlayer.
- */
+type LayerIndex = 0 | 1;
+
+const CROSSFADE_MS = 450;
+const PREFETCH_SETTLE_MS = 300;
+
+const PANORAMA_OPTIONS: google.maps.StreetViewPanoramaOptions = {
+  zoom: 1,
+  addressControl: false,
+  showRoadLabels: false,
+  fullscreenControl: false,
+  linksControl: false,
+  panControl: false,
+  enableCloseButton: false,
+  visible: true,
+};
+
 export default function StreetViewPlayer({
-    denseWaypoints,
-    fullscreen,
-    visible,
+  denseWaypoints,
+  fullscreen,
+  visible,
 }: StreetViewPlayerProps) {
-    const {
-      googleApiKey,
-      isPlaying,
-      playbackRate,
-      sessionElapsed,
-    } = useAppState();
+  const {
+    googleApiKey,
+    isPlaying,
+    playbackRate,
+    sessionElapsed,
+  } = useAppState();
 
-    const containerRef = useRef<HTMLDivElement>(null);
-    const panoramaRef = useRef<google.maps.StreetViewPanorama | null>(null);
-    const panoCreatedRef = useRef(false);
-    const lastFrameRef = useRef(-1);
-    const lastPositionUpdateRef = useRef(0);
-    const rafRef = useRef<number | null>(null);
-    const [svError, setSvError] = useState("");
+  const layer0Ref = useRef<HTMLDivElement>(null);
+  const layer1Ref = useRef<HTMLDivElement>(null);
+  const panoramasRef = useRef<
+    [google.maps.StreetViewPanorama | null, google.maps.StreetViewPanorama | null]
+  >([null, null]);
+  const requestedFramesRef = useRef<[number, number]>([-1, -1]);
+  const readyFramesRef = useRef<[number, number]>([-1, -1]);
+  const readyAtRef = useRef<[number, number]>([0, 0]);
+  const inFlightRef = useRef<[boolean, boolean]>([false, false]);
+  const failedFramesRef = useRef<[number, number]>([-1, -1]);
+  const activeLayerRef = useRef<LayerIndex>(0);
+  const transitionLockedUntilRef = useRef(0);
+  const rafRef = useRef<number | null>(null);
+  const initializedRef = useRef(false);
+  const sessionElapsedRef = useRef(sessionElapsed);
+  const playbackRateRef = useRef(playbackRate);
 
-    // Keep sessionElapsed in a ref so the RAF loop doesn't depend on reactive state
-    const sessionElapsedRef = useRef(sessionElapsed);
-    sessionElapsedRef.current = sessionElapsed;
-    const playbackRateRef = useRef(playbackRate);
-    playbackRateRef.current = playbackRate;
+  const [activeLayer, setActiveLayer] = useState<LayerIndex>(0);
+  const [initialized, setInitialized] = useState(false);
+  const [svError, setSvError] = useState("");
 
-    // ── Load Google Maps JS API ──────────────────────────
-    const hasKey = googleApiKey.trim().length > 0;
-    const { isLoaded: mapsReady, loadError } = useGoogleMapsLoader(googleApiKey);
+  sessionElapsedRef.current = sessionElapsed;
+  playbackRateRef.current = playbackRate;
 
-    // ── Create StreetViewPanorama ─────────────────────────
-    useEffect(() => {
-      if (!hasKey || !mapsReady || !containerRef.current || denseWaypoints.length === 0) return;
-      if (panoCreatedRef.current) return;
+  const hasKey = googleApiKey.trim().length > 0;
+  const { isLoaded: mapsReady, loadError } = useGoogleMapsLoader(googleApiKey);
 
-      const first = denseWaypoints[0];
-      try {
-        const panorama = new google.maps.StreetViewPanorama(containerRef.current, {
-          position: { lat: first.lat, lng: first.lng },
-          pov: { heading: first.heading, pitch: 0 },
-          zoom: 1,
-          addressControl: false,
-          showRoadLabels: false,
-          fullscreenControl: false,
-          linksControl: false,
-          panControl: false,
-          enableCloseButton: false,
-          visible: true,
+  useEffect(() => {
+    if (
+      !hasKey ||
+      !mapsReady ||
+      !layer0Ref.current ||
+      !layer1Ref.current ||
+      denseWaypoints.length === 0 ||
+      initializedRef.current
+    ) {
+      return;
+    }
+
+    const containers = [layer0Ref.current, layer1Ref.current] as const;
+    const initialFrame = Math.min(
+      Math.floor(sessionElapsedRef.current * playbackRateRef.current),
+      denseWaypoints.length - 1,
+    );
+    const prefetchedFrame = Math.min(
+      initialFrame + Math.max(1, Math.ceil(playbackRateRef.current)),
+      denseWaypoints.length - 1,
+    );
+
+    try {
+      ([initialFrame, prefetchedFrame] as const).forEach((frameIndex, layer) => {
+        const wp = denseWaypoints[frameIndex];
+        requestedFramesRef.current[layer] = frameIndex;
+        inFlightRef.current[layer] = true;
+
+        const panorama = new google.maps.StreetViewPanorama(containers[layer], {
+          ...PANORAMA_OPTIONS,
+          position: { lat: wp.lat, lng: wp.lng },
+          pov: { heading: wp.heading, pitch: 0 },
         });
 
-        // Listen for status changes to detect coverage or API issues
         panorama.addListener("status_changed", () => {
           const status = panorama.getStatus();
+          const requestedFrame = requestedFramesRef.current[layer];
+          const isActive = activeLayerRef.current === layer;
+          inFlightRef.current[layer] = false;
+
           if (status === "OK") {
-            setSvError("");
-          } else if (status === "ZERO_RESULTS") {
-            setSvError("No Street View coverage at this location");
-          } else if (status === "UNKNOWN_ERROR") {
-            setSvError("Street View API error — check your API key and billing");
+            readyFramesRef.current[layer] = requestedFrame;
+            failedFramesRef.current[layer] = -1;
+            readyAtRef.current[layer] = performance.now() + PREFETCH_SETTLE_MS;
+            if (isActive) setSvError("");
+          } else {
+            readyFramesRef.current[layer] = -1;
+            failedFramesRef.current[layer] = requestedFrame;
+            const desiredFrame = Math.min(
+              Math.floor(sessionElapsedRef.current * playbackRateRef.current),
+              denseWaypoints.length - 1,
+            );
+            if (isActive && status === "ZERO_RESULTS") {
+              setSvError("No Street View coverage at this location");
+            } else if (isActive && status === "UNKNOWN_ERROR") {
+              setSvError("Street View API error - check your API key and billing");
+            } else if (requestedFrame === desiredFrame) {
+              setSvError("Unable to preload Street View at the next waypoint");
+            }
           }
         });
 
-        panoramaRef.current = panorama;
-        panoCreatedRef.current = true;
-        setSvError("");
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Unknown error";
-        setSvError(`Failed to create Street View: ${message}`);
+        panoramasRef.current[layer] = panorama;
+      });
+
+      readyFramesRef.current[0] = initialFrame;
+      activeLayerRef.current = 0;
+      setActiveLayer(0);
+      initializedRef.current = true;
+      setInitialized(true);
+      setSvError("");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setSvError(`Failed to create Street View: ${message}`);
+    }
+
+    return () => {
+      panoramasRef.current.forEach((panorama) => {
+        if (panorama) google.maps.event.clearInstanceListeners(panorama);
+      });
+      panoramasRef.current = [null, null];
+      requestedFramesRef.current = [-1, -1];
+      readyFramesRef.current = [-1, -1];
+      inFlightRef.current = [false, false];
+      failedFramesRef.current = [-1, -1];
+      transitionLockedUntilRef.current = 0;
+      initializedRef.current = false;
+      setInitialized(false);
+    };
+  }, [denseWaypoints, hasKey, mapsReady]);
+
+  useEffect(() => {
+    const resizePanoramas = () => {
+      panoramasRef.current.forEach((panorama) => {
+        if (panorama) google.maps.event.trigger(panorama, "resize");
+      });
+    };
+    const frameId = requestAnimationFrame(resizePanoramas);
+    const timeoutId = window.setTimeout(resizePanoramas, CROSSFADE_MS);
+    return () => {
+      cancelAnimationFrame(frameId);
+      clearTimeout(timeoutId);
+    };
+  }, [fullscreen]);
+
+  useEffect(() => {
+    if (!isPlaying || !initialized || denseWaypoints.length < 2) {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      return;
+    }
+
+    const loadFrame = (layer: LayerIndex, frameIndex: number) => {
+      const panorama = panoramasRef.current[layer];
+      const wp = denseWaypoints[frameIndex];
+      if (
+        !panorama ||
+        !wp ||
+        inFlightRef.current[layer] ||
+        failedFramesRef.current[layer] === frameIndex ||
+        (
+          requestedFramesRef.current[layer] === frameIndex &&
+          readyFramesRef.current[layer] === frameIndex
+        )
+      ) {
+        return;
       }
 
-      return () => {
-        // Clean up listeners on the panorama before nulling ref
-        if (panoramaRef.current) {
-          google.maps.event.clearInstanceListeners(panoramaRef.current);
+      requestedFramesRef.current[layer] = frameIndex;
+      readyFramesRef.current[layer] = -1;
+      readyAtRef.current[layer] = Number.POSITIVE_INFINITY;
+      inFlightRef.current[layer] = true;
+      failedFramesRef.current[layer] = -1;
+      panorama.setPov({ heading: wp.heading, pitch: 0 });
+      panorama.setPosition({ lat: wp.lat, lng: wp.lng });
+    };
+
+    const tick = () => {
+      const now = performance.now();
+      const rawFrame = sessionElapsedRef.current * playbackRateRef.current;
+      const desiredFrame = Math.min(
+        Math.floor(rawFrame),
+        denseWaypoints.length - 1,
+      );
+      const active = activeLayerRef.current;
+      const inactive = (active === 0 ? 1 : 0) as LayerIndex;
+      const activeFrame = readyFramesRef.current[active];
+
+      if (desiredFrame !== activeFrame) {
+        if (
+          requestedFramesRef.current[inactive] !== desiredFrame &&
+          now >= transitionLockedUntilRef.current
+        ) {
+          loadFrame(inactive, desiredFrame);
+        } else if (
+          readyFramesRef.current[inactive] === desiredFrame &&
+          now >= readyAtRef.current[inactive] &&
+          now >= transitionLockedUntilRef.current
+        ) {
+          activeLayerRef.current = inactive;
+          transitionLockedUntilRef.current = now + CROSSFADE_MS;
+          setActiveLayer(inactive);
+          setSvError("");
         }
-        panoCreatedRef.current = false;
-        panoramaRef.current = null;
-      };
-    }, [hasKey, mapsReady, denseWaypoints]);
+      } else if (now >= transitionLockedUntilRef.current) {
+        const predictedFrame = Math.min(
+          Math.floor(rawFrame + Math.max(1, playbackRateRef.current)),
+          denseWaypoints.length - 1,
+        );
+        if (predictedFrame !== activeFrame) {
+          loadFrame(inactive, predictedFrame);
+        }
+      }
 
-    useEffect(() => {
-      const panorama = panoramaRef.current;
-      if (!panorama) return;
+      rafRef.current = requestAnimationFrame(tick);
+    };
 
-      const frameId = requestAnimationFrame(() => {
-        google.maps.event.trigger(panorama, "resize");
-      });
-      return () => cancelAnimationFrame(frameId);
-    }, [fullscreen]);
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [denseWaypoints, initialized, isPlaying]);
 
-    // ── Frame advancement loop ────────────────────────────
-        // Use refs for elapsed/rate to avoid re-creating the RAF loop on every
-        // state change, which would trigger excessive tile requests. Position
-        // updates are throttled to ~500ms minimum interval to avoid 429 errors.
-        useEffect(() => {
-          if (!isPlaying || !panoramaRef.current || denseWaypoints.length < 2) {
-            lastFrameRef.current = -1;
-            return;
-          }
+  const errorMessage = svError || (loadError ? `Google Maps error: ${loadError.message}` : "");
 
-          const MIN_POSITION_INTERVAL_MS = 500; // Throttle setPosition to avoid tile server 429
+  if (!visible) return null;
 
-          const tick = () => {
-            const pano = panoramaRef.current;
-            if (!pano) return;
+  const layerStyle = (layer: LayerIndex): React.CSSProperties => ({
+    position: "absolute",
+    inset: 0,
+    opacity: activeLayer === layer ? 1 : 0,
+    zIndex: activeLayer === layer ? 2 : 1,
+    pointerEvents: activeLayer === layer ? "auto" : "none",
+    transition: `opacity ${CROSSFADE_MS}ms ease-in-out`,
+    background: "#000",
+  });
 
-            const rawFrame = sessionElapsedRef.current * playbackRateRef.current;
-            const frameIndex = Math.min(Math.floor(rawFrame), denseWaypoints.length - 1);
+  return (
+    <div style={{
+      width: "100%",
+      height: "100%",
+      position: "absolute",
+      inset: 0,
+      overflow: "hidden",
+      background: "#000",
+    }}>
+      <div ref={layer0Ref} style={layerStyle(0)} />
+      <div ref={layer1Ref} style={layerStyle(1)} />
 
-            if (frameIndex !== lastFrameRef.current) {
-              const now = performance.now();
-              // Only update position if enough time has passed since last update
-              if (now - lastPositionUpdateRef.current >= MIN_POSITION_INTERVAL_MS || lastFrameRef.current === -1) {
-                lastPositionUpdateRef.current = now;
-                lastFrameRef.current = frameIndex;
-                const wp = denseWaypoints[frameIndex];
-                pano.setPosition({ lat: wp.lat, lng: wp.lng });
-                pano.setPov({ heading: wp.heading, pitch: 0 });
-              }
-            }
-
-            if (frameIndex >= denseWaypoints.length - 1) {
-              return; // Route complete
-            }
-
-            rafRef.current = requestAnimationFrame(tick);
-          };
-
-          rafRef.current = requestAnimationFrame(tick);
-
-          return () => {
-            if (rafRef.current) cancelAnimationFrame(rafRef.current);
-          };
-        }, [isPlaying, denseWaypoints]);
-
-    const errorMessage = svError || (loadError ? `Google Maps error: ${loadError.message}` : "");
-
-    if (!visible) return null;
-
-    return (
-      <div
-        ref={containerRef}
-        style={{
-          width: "100%",
-          height: "100%",
-          position: "absolute",
-          inset: 0,
+      {!hasKey && (
+        <div style={{
+          position: "absolute", inset: 0, zIndex: 5, display: "flex",
+          alignItems: "center", justifyContent: "center",
+          color: "#fbbf24", fontSize: 14, padding: 20, textAlign: "center",
           background: "#000",
-        }}
-      >
-        {!hasKey && (
-          <div style={{
-            position: "absolute", inset: 0, display: "flex",
-            alignItems: "center", justifyContent: "center",
-            color: "#fbbf24", fontSize: 14, padding: 20, textAlign: "center",
-          }}>
-            Google API key required — add it in Settings to use Live Street View
-          </div>
-        )}
-        {hasKey && !mapsReady && !errorMessage && (
-          <div style={{
-            position: "absolute", inset: 0, display: "flex",
-            alignItems: "center", justifyContent: "center",
-            color: "rgba(255,255,255,0.6)", fontSize: 14,
-          }}>
-            Loading Street View…
-          </div>
-        )}
-        {errorMessage && (
-          <div style={{
-            position: "absolute", inset: 0, display: "flex",
-            alignItems: "center", justifyContent: "center",
-            color: "#f87171", fontSize: 14, padding: 20, textAlign: "center",
-          }}>
-            {errorMessage}
-          </div>
-        )}
-      </div>
-    );
+        }}>
+          Google API key required - add it in Settings to use Live Street View
+        </div>
+      )}
+      {hasKey && !mapsReady && !errorMessage && (
+        <div style={{
+          position: "absolute", inset: 0, zIndex: 5, display: "flex",
+          alignItems: "center", justifyContent: "center",
+          color: "rgba(255,255,255,0.6)", fontSize: 14,
+          background: "#000",
+        }}>
+          Loading Street View...
+        </div>
+      )}
+      {errorMessage && (
+        <div style={{
+          position: "absolute", inset: 0, zIndex: 5, display: "flex",
+          alignItems: "center", justifyContent: "center",
+          color: "#f87171", fontSize: 14, padding: 20, textAlign: "center",
+          background: "rgba(0,0,0,0.82)",
+        }}>
+          {errorMessage}
+        </div>
+      )}
+    </div>
+  );
 }
