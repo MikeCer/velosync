@@ -199,9 +199,10 @@ type VideoMode = "static" | "live";
 
   // ── Google Maps JS loader ─────────────────────────────
   const { isLoaded: gmLoaded } = useJsApiLoader({
-    googleMapsApiKey: googleApiKey,
-    libraries: LIBRARIES,
-  });
+      id: "google-maps-script",
+      googleMapsApiKey: googleApiKey,
+      libraries: LIBRARIES,
+    });
 
   // ── Load saved data ──────────────────────────────────
   useEffect(() => {

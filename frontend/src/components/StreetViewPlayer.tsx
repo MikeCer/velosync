@@ -47,13 +47,14 @@ export default function StreetViewPlayer({
     playbackRateRef.current = playbackRate;
 
     // ── Load Google Maps JS API ──────────────────────────
-    // Only load when an API key is configured; without a key the anonymous
-    // Maps JS API will be throttled (429) or won't load streetView at all.
+        // Share the loader instance with RouteCreatorPage by using the same id.
+        // Include all needed libraries so a single <script> tag is used.
     const hasKey = !!googleApiKey;
     const { isLoaded: mapsReady, loadError } = useJsApiLoader({
-      googleMapsApiKey: googleApiKey || "",
-      libraries: hasKey ? ["streetView"] : [],
-    });
+          id: "google-maps-script",
+          googleMapsApiKey: googleApiKey || "",
+          libraries: hasKey ? ["places", "geometry", "streetView"] : [],
+        });
 
     // ── Create StreetViewPanorama ─────────────────────────
     useEffect(() => {
@@ -74,6 +75,19 @@ export default function StreetViewPlayer({
           enableCloseButton: false,
           visible: true,
         });
+
+        // Listen for status changes to detect coverage or API issues
+        panorama.addListener("status_changed", () => {
+          const status = panorama.getStatus();
+          if (status === "OK") {
+            setSvError("");
+          } else if (status === "ZERO_RESULTS") {
+            setSvError("No Street View coverage at this location");
+          } else if (status === "UNKNOWN_ERROR") {
+            setSvError("Street View API error — check your API key and billing");
+          }
+        });
+
         panoramaRef.current = panorama;
         panoCreatedRef.current = true;
         setSvError("");
@@ -82,6 +96,10 @@ export default function StreetViewPlayer({
       }
 
       return () => {
+        // Clean up listeners on the panorama before nulling ref
+        if (panoramaRef.current) {
+          google.maps.event.clearInstanceListeners(panoramaRef.current);
+        }
         panoCreatedRef.current = false;
         panoramaRef.current = null;
       };
