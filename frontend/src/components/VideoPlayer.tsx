@@ -16,9 +16,10 @@ export default function VideoPlayer() {
   const [showSpeedGauge, setShowSpeedGauge] = useState(() => {
     return localStorage.getItem("fullscreenSpeedGauge") === "true";
   });
-    const [showHud, setShowHud] = useState(() => {
-      return localStorage.getItem("fullscreenHud") === "true";
-    });
+  const [showHud, setShowHud] = useState(() => {
+    return localStorage.getItem("fullscreenHud") !== "false";
+  });
+  const [fullscreenError, setFullscreenError] = useState("");
   const hideTimerRef = useRef<number | null>(null);
 
   const currentVideo = playlist[currentVideoIndex];
@@ -56,9 +57,21 @@ export default function VideoPlayer() {
   }, [currentVideo?.filename]);
 
   useEffect(() => {
-    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    const onFsChange = () => {
+      const playerIsFullscreen = document.fullscreenElement === containerRef.current;
+      setIsFullscreen(playerIsFullscreen);
+      setShowOverlay(true);
+    };
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+      }
+    };
   }, []);
 
   const handleMouseMove = useCallback(() => {
@@ -68,13 +81,19 @@ export default function VideoPlayer() {
     hideTimerRef.current = window.setTimeout(() => setShowOverlay(false), 3000);
   }, [isFullscreen]);
 
-  const toggleFullscreen = useCallback(() => {
+  const toggleFullscreen = useCallback(async () => {
     const el = containerRef.current;
     if (!el) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      el.requestFullscreen();
+    try {
+      if (document.fullscreenElement === el) {
+        await document.exitFullscreen();
+      } else {
+        await el.requestFullscreen();
+      }
+      setFullscreenError("");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Fullscreen is unavailable";
+      setFullscreenError(message);
     }
   }, []);
 
@@ -86,13 +105,13 @@ export default function VideoPlayer() {
     });
   }, []);
 
-    const toggleHud = useCallback(() => {
-      setShowHud((prev) => {
-        const next = !prev;
-        localStorage.setItem("fullscreenHud", String(next));
-        return next;
-      });
-    }, []);
+  const toggleHud = useCallback(() => {
+    setShowHud((prev) => {
+      const next = !prev;
+      localStorage.setItem("fullscreenHud", String(next));
+      return next;
+    });
+  }, []);
 
   const handleEnded = useCallback(() => {
       if (isLiveRoute) {
@@ -129,25 +148,48 @@ export default function VideoPlayer() {
       ref={containerRef}
       onMouseMove={handleMouseMove}
       onTouchStart={handleMouseMove}
-      style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#000" }}
+      onDoubleClick={toggleFullscreen}
+      style={{
+        position: "relative",
+        width: isFullscreen ? "100vw" : "100%",
+        height: isFullscreen ? "100vh" : undefined,
+        borderRadius: isFullscreen ? 0 : 12,
+        overflow: "hidden",
+        background: "#000",
+      }}
     >
-        {isLiveRoute ? (
-                <div style={{ aspectRatio: "16/9", position: "relative", background: "#000" }}>
-                  <StreetViewPlayer
-                    denseWaypoints={currentVideo.denseWaypoints || []}
-                    visible={true}
-                  />
-                </div>
-              ) : (
-                <video
-                  ref={videoRef}
-                  src={src}
-                  controls={false}
-                  playsInline
-                  onEnded={handleEnded}
-                  style={{ width: "100%", display: "block", aspectRatio: "16/9", objectFit: "contain", background: "#000" }}
-                />
-              )}
+      {isLiveRoute ? (
+        <div style={{
+          position: "relative",
+          zIndex: 0,
+          width: "100%",
+          height: isFullscreen ? "100%" : undefined,
+          aspectRatio: isFullscreen ? undefined : "16/9",
+          background: "#000",
+        }}>
+          <StreetViewPlayer
+            denseWaypoints={currentVideo.denseWaypoints || []}
+            fullscreen={isFullscreen}
+            visible={true}
+          />
+        </div>
+      ) : (
+        <video
+          ref={videoRef}
+          src={src}
+          controls={false}
+          playsInline
+          onEnded={handleEnded}
+          style={{
+            width: "100%",
+            height: isFullscreen ? "100%" : undefined,
+            display: "block",
+            aspectRatio: isFullscreen ? undefined : "16/9",
+            objectFit: "contain",
+            background: "#000",
+          }}
+        />
+      )}
 
       {/* Persistent speed gauge in top-left (fullscreen only) */}
       {isFullscreen && showSpeedGauge && (
@@ -173,8 +215,8 @@ export default function VideoPlayer() {
         </div>
       )}
 
-            {/* HUD overlay (fullscreen only, persistent) */}
-            {isFullscreen && <HudOverlay visible={showHud} />}
+      {/* Live sessions keep telemetry visible; static videos show it in fullscreen. */}
+      {(isFullscreen || isLiveRoute) && <HudOverlay visible={showHud} />}
 
       {isFullscreen && showOverlay && (
         <div style={{
@@ -182,6 +224,7 @@ export default function VideoPlayer() {
           padding: "20px 28px 24px",
           background: "linear-gradient(transparent, rgba(0,0,0,0.85) 40%)",
           pointerEvents: "auto",
+          zIndex: 50,
         }}>
           <SpeedDisplay />
           <div style={{ marginTop: 12 }}>
@@ -198,6 +241,13 @@ export default function VideoPlayer() {
                           {!isLiveRoute && <AudioControl videoRef={videoRef} compact />}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setIsPlaying(!isPlaying)}
+                title={isPlaying ? "Pause" : "Start"}
+                style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: "rgba(255,255,255,0.15)", color: "#fff", fontSize: 16, cursor: "pointer" }}
+              >
+                {isPlaying ? "⏸" : "▶"}
+              </button>
               {currentVideoIndex > 0 && (
                 <button onClick={() => setCurrentVideoIndex(currentVideoIndex - 1)}
                   style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: "rgba(255,255,255,0.15)", color: "#fff", fontSize: 14, cursor: "pointer" }}>
@@ -233,8 +283,9 @@ export default function VideoPlayer() {
                               📊
                             </button>
               <button onClick={toggleFullscreen}
+                title="Exit fullscreen"
                 style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: "rgba(255,255,255,0.15)", color: "#fff", fontSize: 16, cursor: "pointer" }}>
-                ↙
+                ✕
               </button>
             </div>
           </div>
@@ -247,16 +298,38 @@ export default function VideoPlayer() {
             position: "absolute", top: 12, left: 12, padding: "6px 14px", borderRadius: 8,
             background: "rgba(0,0,0,0.75)", color: "#fff", fontSize: 14, fontWeight: 500,
             maxWidth: "70%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  display: "flex", alignItems: "center", gap: 6,
-                }}>
-                  {isLiveRoute && (
-                    <span style={{ fontSize: 10, color: "#22d3ee", fontWeight: 700 }}>🌐 LIVE</span>
-                  )}
-                  <span>
-                    {currentVideoIndex + 1} / {playlist.length} — {currentVideo.title}
-                  </span>
-                </div>
-          <div style={{ display: "flex", gap: 8, position: "absolute", bottom: 16, right: 16 }}>
+            display: "flex", alignItems: "center", gap: 6, zIndex: 40,
+          }}>
+            {isLiveRoute && (
+              <span style={{ fontSize: 10, color: "#22d3ee", fontWeight: 700 }}>🌐 LIVE</span>
+            )}
+            <span>
+              {currentVideoIndex + 1} / {playlist.length} — {currentVideo.title}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 8, position: "absolute", bottom: 16, right: 16, zIndex: 40 }}>
+            {isLiveRoute && (
+              <>
+                <button
+                  onClick={() => setIsPlaying(!isPlaying)}
+                  style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "rgba(0,0,0,0.72)", color: "#fff", fontSize: 16, cursor: "pointer" }}
+                  title={isPlaying ? "Pause live route" : "Start live route"}
+                >
+                  {isPlaying ? "⏸" : "▶"}
+                </button>
+                <button
+                  onClick={toggleHud}
+                  style={{
+                    padding: "8px 14px", borderRadius: 8, border: "none",
+                    background: showHud ? "rgba(96,165,250,0.8)" : "rgba(0,0,0,0.72)",
+                    color: "#fff", fontSize: 16, cursor: "pointer",
+                  }}
+                  title={showHud ? "Hide telemetry overlay" : "Show telemetry overlay"}
+                >
+                  📊
+                </button>
+              </>
+            )}
             {currentVideoIndex > 0 && (
               <button onClick={() => setCurrentVideoIndex(currentVideoIndex - 1)}
                 style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "rgba(255,255,255,0.15)", color: "#fff", fontSize: 16, cursor: "pointer" }}>
@@ -272,10 +345,19 @@ export default function VideoPlayer() {
             <button onClick={toggleFullscreen}
               style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "rgba(255,255,255,0.15)", color: "#fff", fontSize: 18, cursor: "pointer" }}
               title="Toggle fullscreen">
-              ↗
+              ⛶
             </button>
           </div>
         </>
+      )}
+      {fullscreenError && (
+        <div style={{
+          position: "absolute", left: "50%", bottom: 72, transform: "translateX(-50%)",
+          zIndex: 60, padding: "8px 12px", borderRadius: 8,
+          background: "rgba(127,29,29,0.92)", color: "#fecaca", fontSize: 13,
+        }}>
+          {fullscreenError}
+        </div>
       )}
     </div>
   );

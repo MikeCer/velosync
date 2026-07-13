@@ -5,6 +5,7 @@ import type { WaypointWithHeading } from "../types";
 
 interface StreetViewPlayerProps {
     denseWaypoints: WaypointWithHeading[];
+    fullscreen: boolean;
     visible: boolean;
 }
 
@@ -17,6 +18,7 @@ interface StreetViewPlayerProps {
  */
 export default function StreetViewPlayer({
     denseWaypoints,
+    fullscreen,
     visible,
 }: StreetViewPlayerProps) {
     const {
@@ -93,6 +95,16 @@ export default function StreetViewPlayer({
         panoramaRef.current = null;
       };
     }, [hasKey, mapsReady, denseWaypoints]);
+
+    useEffect(() => {
+      const panorama = panoramaRef.current;
+      if (!panorama) return;
+
+      const frameId = requestAnimationFrame(() => {
+        google.maps.event.trigger(panorama, "resize");
+      });
+      return () => cancelAnimationFrame(frameId);
+    }, [fullscreen]);
 
     // ── Frame advancement loop ────────────────────────────
         // Use refs for elapsed/rate to avoid re-creating the RAF loop on every
