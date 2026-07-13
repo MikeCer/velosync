@@ -35,9 +35,16 @@ export default function StreetViewPlayer({
     const containerRef = useRef<HTMLDivElement>(null);
     const panoramaRef = useRef<google.maps.StreetViewPanorama | null>(null);
     const panoCreatedRef = useRef(false);
-    const lastFrameRef = useRef(0);
+    const lastFrameRef = useRef(-1);
+    const lastPositionUpdateRef = useRef(0);
     const rafRef = useRef<number | null>(null);
     const [svError, setSvError] = useState("");
+
+    // Keep sessionElapsed in a ref so the RAF loop doesn't depend on reactive state
+    const sessionElapsedRef = useRef(sessionElapsed);
+    sessionElapsedRef.current = sessionElapsed;
+    const playbackRateRef = useRef(playbackRate);
+    playbackRateRef.current = playbackRate;
 
     // ── Load Google Maps JS API ──────────────────────────
     // Only load when an API key is configured; without a key the anonymous
@@ -81,36 +88,49 @@ export default function StreetViewPlayer({
     }, [hasKey, mapsReady, denseWaypoints]);
 
     // ── Frame advancement loop ────────────────────────────
-    useEffect(() => {
-      if (!isPlaying || !panoramaRef.current || denseWaypoints.length < 2) return;
+        // Use refs for elapsed/rate to avoid re-creating the RAF loop on every
+        // state change, which would trigger excessive tile requests. Position
+        // updates are throttled to ~500ms minimum interval to avoid 429 errors.
+        useEffect(() => {
+          if (!isPlaying || !panoramaRef.current || denseWaypoints.length < 2) {
+            lastFrameRef.current = -1;
+            return;
+          }
 
-      const tick = () => {
-        const pano = panoramaRef.current;
-        if (!pano) return;
+          const MIN_POSITION_INTERVAL_MS = 500; // Throttle setPosition to avoid tile server 429
 
-        const rawFrame = sessionElapsed * playbackRate;
-        const frameIndex = Math.min(Math.floor(rawFrame), denseWaypoints.length - 1);
+          const tick = () => {
+            const pano = panoramaRef.current;
+            if (!pano) return;
 
-        if (frameIndex !== lastFrameRef.current) {
-          lastFrameRef.current = frameIndex;
-          const wp = denseWaypoints[frameIndex];
-          pano.setPosition({ lat: wp.lat, lng: wp.lng });
-          pano.setPov({ heading: wp.heading, pitch: 0 });
-        }
+            const rawFrame = sessionElapsedRef.current * playbackRateRef.current;
+            const frameIndex = Math.min(Math.floor(rawFrame), denseWaypoints.length - 1);
 
-        if (frameIndex >= denseWaypoints.length - 1) {
-          return; // Route complete
-        }
+            if (frameIndex !== lastFrameRef.current) {
+              const now = performance.now();
+              // Only update position if enough time has passed since last update
+              if (now - lastPositionUpdateRef.current >= MIN_POSITION_INTERVAL_MS || lastFrameRef.current === -1) {
+                lastPositionUpdateRef.current = now;
+                lastFrameRef.current = frameIndex;
+                const wp = denseWaypoints[frameIndex];
+                pano.setPosition({ lat: wp.lat, lng: wp.lng });
+                pano.setPov({ heading: wp.heading, pitch: 0 });
+              }
+            }
 
-        rafRef.current = requestAnimationFrame(tick);
-      };
+            if (frameIndex >= denseWaypoints.length - 1) {
+              return; // Route complete
+            }
 
-      rafRef.current = requestAnimationFrame(tick);
+            rafRef.current = requestAnimationFrame(tick);
+          };
 
-      return () => {
-        if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      };
-    }, [isPlaying, playbackRate, sessionElapsed, denseWaypoints]);
+          rafRef.current = requestAnimationFrame(tick);
+
+          return () => {
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+          };
+        }, [isPlaying, denseWaypoints]);
 
     const errorMessage = svError || (loadError ? `Google Maps error: ${loadError.message}` : "");
 
