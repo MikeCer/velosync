@@ -15,6 +15,12 @@ export interface LibraryVideo {
   fileSize: number;
   downloadedAt: number;
   youtubeUrl: string;
+  source: "youtube" | "streetview";
+  waypoints?: Waypoint[];
+  distanceKm?: number;
+  description?: string;
+  mode?: "static" | "live";
+  denseWaypoints?: WaypointWithHeading[];
 }
 
 export interface DownloadItem {
@@ -39,6 +45,72 @@ export interface Route {
   createdAt: number;
 }
 
+export interface RouteDraft {
+  id: string;
+  name: string;
+  description: string;
+  waypoints: Waypoint[];
+  createdAt: number;
+}
+
+export interface RouteVideoMeta {
+  id: string;
+  name: string;
+  description: string;
+  filename: string;
+  waypoints: Waypoint[];
+  distance_km: number;
+  duration_s: number;
+  file_size: number;
+  generated_at: number;
+  source: "streetview";
+  spacing_m?: number;
+  cache_id?: string;
+  mode?: "static" | "live";
+  /** When mode is "live", these are included */
+  dense_waypoints?: WaypointWithHeading[];
+}
+
+export interface WaypointWithHeading {
+  lat: number;
+  lng: number;
+  heading: number;
+}
+
+export interface LiveRouteSaveRequest {
+  waypoints: Waypoint[];
+  route_name: string;
+  description: string;
+}
+
+export interface RouteGenerateRequest {
+  waypoints: Waypoint[];
+  route_name: string;
+  description: string;
+  api_key: string;
+  spacing_m: number;
+  cached_route_id?: string;
+}
+
+export interface CoverageCheckRequest {
+  waypoints: Waypoint[];
+  api_key: string;
+}
+
+export interface CoverageResult {
+  covered: number;
+  uncovered: Array<{ lat: number; lng: number; index: number; status: string }>;
+  total: number;
+}
+
+export interface CacheInfo {
+  cache_id: string;
+  route_name: string;
+  waypoints_count: number;
+  frames_count: number;
+  waypoints: Waypoint[];
+}
+
 export interface SessionRecord {
   id: string;
   date: number;
@@ -51,6 +123,8 @@ export interface SessionRecord {
   maxSpeed: number;
   avgHeartRate: number | null;
   maxHeartRate: number | null;
+  videoSource?: "youtube" | "streetview";
+  routeVideoId?: string;
 }
 
 export interface BLEDeviceInfo {

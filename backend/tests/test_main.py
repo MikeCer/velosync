@@ -1,6 +1,9 @@
+"""Tests for VeloSync backend API endpoints — now using the modular backend package."""
+
 import pytest
 from fastapi.testclient import TestClient
-from main import app
+
+from backend.main import app
 
 client = TestClient(app)
 
@@ -39,3 +42,15 @@ def test_download_queue():
     resp = client.get("/api/download/queue")
     assert resp.status_code == 200
     assert isinstance(resp.json(), dict)
+
+
+def test_route_list_empty():
+    resp = client.get("/api/routes/list")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+def test_unified_library():
+    resp = client.get("/api/library")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)

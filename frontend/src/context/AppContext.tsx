@@ -1,8 +1,16 @@
 import React, { createContext, useContext, useState } from "react";
-import type { LibraryVideo, Route, BLEDeviceInfo, HRMDeviceInfo, SpeedSource } from "../types";
+import type { LibraryVideo, Route, BLEDeviceInfo, HRMDeviceInfo, SpeedSource, RouteVideoMeta, VideoMeta } from "../types";
 import { speedToPlaybackRate, getBaselineSpeed } from "../services/speedMapping";
 
+export type ActivePage = "training" | "route-creator";
+
 interface AppState {
+  activePage: ActivePage;
+  setActivePage: (p: ActivePage) => void;
+
+  googleApiKey: string;
+  setGoogleApiKey: (key: string) => void;
+
   youtubeUrl: string;
   setYoutubeUrl: (url: string) => void;
 
@@ -54,11 +62,24 @@ interface AppState {
   setPlaylist: (v: LibraryVideo[]) => void;
   currentVideoIndex: number;
   setCurrentVideoIndex: (i: number) => void;
-}
+
+  routeVideos: RouteVideoMeta[];
+  setRouteVideos: (r: RouteVideoMeta[]) => void;
+
+    useBleSpeed: boolean;
+    setUseBleSpeed: (v: boolean) => void;
+
+    videoMeta: VideoMeta | null;
+    setVideoMeta: (m: VideoMeta | null) => void;
+  }
 
 const AppContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const [activePage, setActivePage] = useState<ActivePage>("training");
+  const [googleApiKey, setGoogleApiKey] = useState(
+    () => localStorage.getItem("googleApiKey") || ""
+  );
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [currentSpeedKmh, setCurrentSpeedKmh] = useState(0);
   const [manualSpeedKmh, setManualSpeedKmh] = useState(getBaselineSpeed());
@@ -83,12 +104,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [library, setLibrary] = useState<LibraryVideo[]>([]);
   const [playlist, setPlaylist] = useState<LibraryVideo[]>([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [routeVideos, setRouteVideos] = useState<RouteVideoMeta[]>([]);
+  const [useBleSpeed, setUseBleSpeed] = useState(false);
+  const [videoMeta, setVideoMeta] = useState<VideoMeta | null>(null);
 
   const baselineSpeed = getBaselineSpeed();
   const effectiveSpeed = speedSource === "manual" ? manualSpeedKmh : currentSpeedKmh;
   const playbackRate = speedToPlaybackRate(effectiveSpeed, baselineSpeed);
 
   const state: AppState = {
+    activePage, setActivePage,
+    googleApiKey, setGoogleApiKey,
     youtubeUrl, setYoutubeUrl,
     currentSpeedKmh, setCurrentSpeedKmh,
     manualSpeedKmh, setManualSpeedKmh,
@@ -111,7 +137,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     library, setLibrary,
     playlist, setPlaylist,
     currentVideoIndex, setCurrentVideoIndex,
-  };
+    routeVideos, setRouteVideos,
+        useBleSpeed, setUseBleSpeed,
+        videoMeta, setVideoMeta,
+      };
 
   return <AppContext.Provider value={state}>{children}</AppContext.Provider>;
 }
