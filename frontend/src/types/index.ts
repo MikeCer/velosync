@@ -160,3 +160,28 @@ export interface VeloSyncSpeedMessage {
     bounce: number;
   };
 }
+
+export interface VeloSyncHardwareConfig {
+  wheelCircumferenceM: number;
+  magnetsPerRev: number;
+}
+
+export interface VeloSyncConfigResult extends VeloSyncHardwareConfig {
+  type: "configResult";
+  version: 1;
+  requestId: string;
+  ok: true;
+}
+
+export interface VeloSyncConfigError {
+  type: "configResult";
+  version: 1;
+  requestId: string;
+  ok: false;
+  error: {
+    code: string;
+    message: string;
+  };
+}
+
+export type VeloSyncConfigResponse = VeloSyncConfigResult | VeloSyncConfigError;

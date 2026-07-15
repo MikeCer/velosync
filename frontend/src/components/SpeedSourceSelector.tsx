@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppState } from "../context/AppContext";
 import { bleConnector } from "../services/ble";
 import { hrmConnector } from "../services/hrm";
@@ -26,6 +26,23 @@ export default function SpeedSourceSelector() {
     { key: "ble", label: "BLE", icon: "📶" },
     { key: "velosyncWs", label: "VeloSync HW", icon: "🔌" },
   ];
+
+  useEffect(() => {
+    velosyncWsConnector.setCallback((speed) => setCurrentSpeedKmh(speed));
+    velosyncWsConnector.setConnectionCallback((connected) => {
+      setVelosyncWsConnected(connected);
+      setWsConnecting(false);
+      if (connected) {
+        setWsError("");
+        setSpeedSource("velosyncWs");
+        localStorage.setItem("speedSource", "velosyncWs");
+      }
+    });
+
+    return () => {
+      velosyncWsConnector.setConnectionCallback(null);
+    };
+  }, [setCurrentSpeedKmh, setSpeedSource, setVelosyncWsConnected]);
 
   const handleSelect = (src: SpeedSource) => {
     setSpeedSource(src);
@@ -67,16 +84,10 @@ export default function SpeedSourceSelector() {
   const handleWsConnect = () => {
     setWsError("");
     setWsConnecting(true);
-    velosyncWsConnector.setCallback((s) => setCurrentSpeedKmh(s));
     velosyncWsConnector.connect(velosyncWsUrl);
     setTimeout(() => {
-      const connected = velosyncWsConnector.isConnected();
-      setVelosyncWsConnected(connected);
-      setWsConnecting(false);
-      if (connected) {
-        setSpeedSource("velosyncWs");
-        localStorage.setItem("speedSource", "velosyncWs");
-      } else {
+      if (!velosyncWsConnector.isConnected()) {
+        setWsConnecting(false);
         setWsError("Could not connect to " + velosyncWsUrl);
       }
     }, 2000);

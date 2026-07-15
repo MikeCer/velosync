@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { setBackendUrl, getBackendUrl } from "../services/api";
 import { getBaselineSpeed, setBaselineSpeed } from "../services/speedMapping";
 import { clearAllSessions } from "../services/db";
+import { velosyncWsConnector } from "../services/velosyncWs";
 import { useAppState } from "../context/AppContext";
 
 const C = {
@@ -17,11 +18,74 @@ export default function SettingsDialog({ open, onClose }: Props) {
   const [urlSaved, setUrlSaved] = useState(false);
   const [baseline, setBaseline] = useState(getBaselineSpeed());
   const [baselineSaved, setBaselineSaved] = useState(false);
-  const { velosyncWsUrl, setVelosyncWsUrl, googleApiKey, setGoogleApiKey } = useAppState();
+  const {
+    velosyncWsUrl,
+    setVelosyncWsUrl,
+    velosyncWsConnected,
+    googleApiKey,
+    setGoogleApiKey,
+  } = useAppState();
   const [wsUrl, setWsUrl] = useState(velosyncWsUrl);
   const [wsSaved, setWsSaved] = useState(false);
+  const [wheelCircumference, setWheelCircumference] = useState("");
+  const [magnetsPerRev, setMagnetsPerRev] = useState("");
+  const [hardwareConfigLoaded, setHardwareConfigLoaded] = useState(false);
+  const [hardwareConfigSaving, setHardwareConfigSaving] = useState(false);
+  const [hardwareConfigSaved, setHardwareConfigSaved] = useState(false);
+  const [hardwareConfigError, setHardwareConfigError] = useState("");
   const [apiKey, setApiKey] = useState(googleApiKey);
   const [apiKeySaved, setApiKeySaved] = useState(false);
+
+  useEffect(() => {
+    velosyncWsConnector.setConfigCallback((config) => {
+      setWheelCircumference(String(config.wheelCircumferenceM));
+      setMagnetsPerRev(String(config.magnetsPerRev));
+      setHardwareConfigLoaded(true);
+    });
+    return () => velosyncWsConnector.setConfigCallback(null);
+  }, []);
+
+  useEffect(() => {
+    if (!velosyncWsConnected) {
+      setHardwareConfigLoaded(false);
+      setHardwareConfigError("");
+      setHardwareConfigSaved(false);
+    }
+  }, [velosyncWsConnected]);
+
+  const saveHardwareConfig = async () => {
+    const wheel = Math.round(Number(wheelCircumference) * 1000) / 1000;
+    const magnets = Number(magnetsPerRev);
+    if (!Number.isFinite(wheel) || wheel < 0.5 || wheel > 4) {
+      setHardwareConfigError("Wheel circumference must be between 0.5 and 4.0 m.");
+      return;
+    }
+    if (!Number.isInteger(magnets) || magnets < 1 || magnets > 16) {
+      setHardwareConfigError("Magnets per revolution must be an integer from 1 to 16.");
+      return;
+    }
+
+    setHardwareConfigError("");
+    setHardwareConfigSaved(false);
+    setHardwareConfigSaving(true);
+    try {
+      const saved = await velosyncWsConnector.updateConfig({
+        wheelCircumferenceM: wheel,
+        magnetsPerRev: magnets,
+      });
+      setWheelCircumference(String(saved.wheelCircumferenceM));
+      setMagnetsPerRev(String(saved.magnetsPerRev));
+      setHardwareConfigSaved(true);
+      window.setTimeout(() => setHardwareConfigSaved(false), 1500);
+    } catch (error) {
+      setHardwareConfigError(
+        error instanceof Error ? error.message : "Could not save the hardware configuration."
+      );
+    } finally {
+      setHardwareConfigSaving(false);
+    }
+  };
+
   const saveGoogleApiKey = () => {
     const nextKey = apiKey.trim();
     const keyChanged = nextKey !== googleApiKey;
@@ -71,6 +135,58 @@ export default function SettingsDialog({ open, onClose }: Props) {
               <button onClick={() => { setVelosyncWsUrl(wsUrl.trim()); localStorage.setItem("velosyncWsUrl", wsUrl.trim()); setWsSaved(true); setTimeout(() => setWsSaved(false), 1500); }} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: wsSaved ? C.success : C.accent, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{wsSaved ? "✓" : "Save"}</button>
             </div>
             <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>ESP8266 WebSocket device URL (e.g. ws://192.168.4.1).</div>
+          </div>
+          <div style={{ borderTop: border2, paddingTop: 16 }}>
+            <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: C.textSec, fontWeight: 600 }}>VeloSync HW calibration</label>
+            {velosyncWsConnected && hardwareConfigLoaded ? (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <div>
+                    <label style={{ display: "block", marginBottom: 4, fontSize: 11, color: C.textDim }}>Wheel circumference (m)</label>
+                    <input
+                      type="number"
+                      value={wheelCircumference}
+                      onChange={(e) => setWheelCircumference(e.target.value)}
+                      min={0.5}
+                      max={4}
+                      step={0.001}
+                      disabled={hardwareConfigSaving}
+                      style={{ boxSizing: "border-box", width: "100%", padding: "8px 12px", borderRadius: 8, border: border1, background: C.bgInput, color: C.text, fontSize: 14 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", marginBottom: 4, fontSize: 11, color: C.textDim }}>Magnets per revolution</label>
+                    <input
+                      type="number"
+                      value={magnetsPerRev}
+                      onChange={(e) => setMagnetsPerRev(e.target.value)}
+                      min={1}
+                      max={16}
+                      step={1}
+                      disabled={hardwareConfigSaving}
+                      style={{ boxSizing: "border-box", width: "100%", padding: "8px 12px", borderRadius: 8, border: border1, background: C.bgInput, color: C.text, fontSize: 14 }}
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={saveHardwareConfig}
+                  disabled={hardwareConfigSaving}
+                  style={{ marginTop: 8, padding: "8px 16px", borderRadius: 8, border: "none", background: hardwareConfigSaved ? C.success : C.accent, color: "#fff", cursor: hardwareConfigSaving ? "wait" : "pointer", fontSize: 13, fontWeight: 600 }}
+                >
+                  {hardwareConfigSaving ? "Saving…" : hardwareConfigSaved ? "✓ Saved" : "Save to device"}
+                </button>
+              </>
+            ) : (
+              <div style={{ fontSize: 12, color: C.textDim }}>
+                {velosyncWsConnected ? "Waiting for device configuration…" : "Connect to VeloSync HW to edit calibration."}
+              </div>
+            )}
+            {hardwareConfigError && (
+              <div style={{ marginTop: 6, padding: "6px 10px", borderRadius: 6, border: borderDanger, background: "var(--danger-bg)", color: C.danger, fontSize: 12 }}>
+                {hardwareConfigError}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: C.textDim, marginTop: 6 }}>Accepted range: 0.5–4.0 m and 1–16 magnets. Values are stored on the device.</div>
           </div>
           <div>
             <label style={{ display: "block", marginBottom: 6, fontSize: 13, color: C.textSec, fontWeight: 500 }}>Google API Key</label>

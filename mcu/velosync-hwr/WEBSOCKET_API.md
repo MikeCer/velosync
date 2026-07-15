@@ -31,7 +31,7 @@ After boot, the serial monitor prints the active device IP address.
 | `GET` | `/api/speed` | One JSON snapshot of the current speed state. |
 | `WebSocket` | `/ws/speed` | Realtime speed telemetry stream. |
 
-Use `ws://<device-ip>/ws/speed` from the React app. The device sends one telemetry message immediately after connection and then broadcasts updates about every `100 ms` while at least one WebSocket client is connected.
+Use `ws://<device-ip>/ws/speed` from the React app. The connection is bidirectional: the device sends telemetry, and clients can update hardware calibration. The device sends one telemetry message immediately after connection and then broadcasts updates about every `100 ms` while at least one WebSocket client is connected.
 
 After a full stop, `speedKmh` intentionally stays at `0` for the first restart pulse. The next valid pulse establishes the movement interval and ramps the filtered speed back up, which avoids a single magnet passage producing an exaggerated speed spike.
 
@@ -76,6 +76,58 @@ Each WebSocket message is a JSON object:
 | `counters.accepted` | number | Accepted reed pulses since boot. |
 | `counters.rejected` | number | Pulses rejected because they were outside the valid speed range. |
 | `counters.bounce` | number | Fast edges ignored as reed-switch bounce or impossible speed. |
+
+## Update hardware configuration
+
+Send a complete WebSocket text frame with both calibration values:
+
+```json
+{
+  "type": "setConfig",
+  "version": 1,
+  "requestId": "settings-42",
+  "wheelCircumferenceM": 2.105,
+  "magnetsPerRev": 1
+}
+```
+
+| Field | Requirement |
+| --- | --- |
+| `requestId` | Non-empty client-generated string used to correlate the response. |
+| `wheelCircumferenceM` | Number from `0.5` through `4.0`, stored to `0.001 m` precision. |
+| `magnetsPerRev` | Integer from `1` through `16`. |
+
+Both values are required and are applied atomically. Accepted changes are stored in EEPROM and survive device restarts. The firmware writes EEPROM only when a value changes, recalculates all calibration-dependent pulse thresholds immediately, resets the current speed measurement, and broadcasts fresh telemetry to every connected client.
+
+Every complete command receives a correlated result. A successful update returns the authoritative stored values:
+
+```json
+{
+  "type": "configResult",
+  "version": 1,
+  "requestId": "settings-42",
+  "ok": true,
+  "wheelCircumferenceM": 2.105,
+  "magnetsPerRev": 1
+}
+```
+
+Rejected commands return a machine-readable code and a user-facing message:
+
+```json
+{
+  "type": "configResult",
+  "version": 1,
+  "requestId": "settings-42",
+  "ok": false,
+  "error": {
+    "code": "out_of_range",
+    "message": "Wheel circumference must be 0.5-4.0 m and magnets per revolution 1-16."
+  }
+}
+```
+
+Possible error codes are `invalid_json`, `missing_request_id`, `invalid_request_id`, `unsupported_message`, `unsupported_frame`, `invalid_config`, `out_of_range`, `device_busy`, and `persistence_failed`. Commands must fit in one text frame. Clients should report success only after receiving an `ok: true` result and should continue treating telemetry/configuration results as authoritative.
 
 ## React usage example
 
