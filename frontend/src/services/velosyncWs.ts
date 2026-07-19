@@ -17,6 +17,7 @@ interface PendingConfigRequest {
 export class VeloSyncWsConnector {
   private ws: WebSocket | null = null;
   private callback: SpeedCallback | null = null;
+  private speedListeners = new Set<SpeedCallback>();
   private configCallback: ConfigCallback | null = null;
   private connectionCallback: ConnectionCallback | null = null;
   private latestConfig: VeloSyncHardwareConfig | null = null;
@@ -29,6 +30,11 @@ export class VeloSyncWsConnector {
 
   setCallback(cb: SpeedCallback): void {
     this.callback = cb;
+  }
+
+  subscribeSpeed(cb: SpeedCallback): () => void {
+    this.speedListeners.add(cb);
+    return () => this.speedListeners.delete(cb);
   }
 
   setConfigCallback(cb: ConfigCallback | null): void {
@@ -79,6 +85,9 @@ export class VeloSyncWsConnector {
         const msg = JSON.parse(event.data as string) as VeloSyncSpeedMessage | VeloSyncConfigResponse;
         if (msg.type === "speed" && msg.version === 1) {
           this.callback?.(msg.speedKmh);
+          for (const listener of this.speedListeners) {
+            listener(msg.speedKmh);
+          }
           this.publishConfig({
             wheelCircumferenceM: msg.wheelCircumferenceM,
             magnetsPerRev: msg.magnetsPerRev,

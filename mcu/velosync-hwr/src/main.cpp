@@ -8,11 +8,11 @@
 #include <string.h>
 
 #ifndef WIFI_SSID
-#define WIFI_SSID "CNWIFI-F1"
+#define WIFI_SSID ""
 #endif
 
 #ifndef WIFI_PASSWORD
-#define WIFI_PASSWORD "ef3600acr2032"
+#define WIFI_PASSWORD ""
 #endif
 
 // ── Hardware ───────────────────────────────────────────
@@ -20,12 +20,12 @@ const int reedPin    = D2;
 const int ledRedPin  = D3;
 const int ledBluePin = D5;
 
-// Calibrate this to the wheel/flywheel path represented by one reed pulse.
-// 2.105m is a common 700x25c bicycle wheel circumference.
+// Effective virtual travel per sensed shaft revolution. For a crank-mounted
+// sensor this must include the bike's internal drive ratio, not the pedal path.
 const float DEFAULT_WHEEL_CIRCUMFERENCE_M = 2.105f;
 const uint8_t DEFAULT_MAGNETS_PER_REV = 1;
-const float MIN_WHEEL_CIRCUMFERENCE_M = 0.5f;
-const float MAX_WHEEL_CIRCUMFERENCE_M = 4.0f;
+const float MIN_WHEEL_CIRCUMFERENCE_M = 0.1f;
+const float MAX_WHEEL_CIRCUMFERENCE_M = 10.0f;
 const uint8_t MIN_MAGNETS_PER_REV = 1;
 const uint8_t MAX_MAGNETS_PER_REV = 16;
 
@@ -324,7 +324,7 @@ void handleConfigMessage(AsyncWebSocketClient* client, uint8_t* data, size_t len
       magnetsPerRev > MAX_MAGNETS_PER_REV ||
       !isValidHardwareConfig(nextConfig)) {
     sendConfigResult(client, requestId, false, "out_of_range",
-                     "Wheel circumference must be 0.5-4.0 m and magnets per revolution 1-16.");
+                     "Distance per sensor revolution must be 0.1-10.0 m and magnets per revolution 1-16.");
     return;
   }
 

@@ -13,15 +13,25 @@ By default, the firmware starts its own Wi-Fi access point:
 | Device URL | `http://192.168.4.1/` |
 | WebSocket URL | `ws://192.168.4.1/ws/speed` |
 
-To connect the device to an existing Wi-Fi network instead, define credentials in `platformio.ini`:
+To build, upload, and monitor with station-mode Wi-Fi credentials, run the
+interactive script for your shell from this directory:
 
-```ini
-build_flags =
-  -D WIFI_SSID=\"YourWifiName\"
-  -D WIFI_PASSWORD=\"YourWifiPassword\"
+```powershell
+.\flash.ps1
 ```
 
-After boot, the serial monitor prints the active device IP address.
+```bash
+bash ./flash.sh
+```
+
+The scripts hide password input, list available serial devices, prompt for the
+upload/monitor port, and pass credentials through process-local environment
+variables. Credentials are not written to the source tree. The serial monitor
+prints the active device IP address after boot.
+
+You can provide the serial port directly (`.\flash.ps1 -Port COM3` or
+`bash ./flash.sh /dev/ttyUSB0`). Leave the SSID empty to build the default
+`VeloSync-HWR` access-point mode.
 
 ## Endpoints
 
@@ -71,7 +81,7 @@ Each WebSocket message is a JSON object:
 | `pulseIntervalMs` | number | Last accepted reed pulse interval in milliseconds, or `0` before the first valid pulse. |
 | `pulseAgeMs` | number | Milliseconds since the last accepted reed pulse, or `0` before the first valid pulse. |
 | `stopped` | boolean | `true` when the filtered speed is below the configured minimum tracked speed. |
-| `wheelCircumferenceM` | number | Firmware calibration value used for speed calculation. |
+| `wheelCircumferenceM` | number | Effective virtual distance per sensed shaft revolution used for speed calculation. The legacy field name is retained for protocol compatibility. |
 | `magnetsPerRev` | number | Number of magnets configured in firmware. |
 | `counters.accepted` | number | Accepted reed pulses since boot. |
 | `counters.rejected` | number | Pulses rejected because they were outside the valid speed range. |
@@ -94,10 +104,18 @@ Send a complete WebSocket text frame with both calibration values:
 | Field | Requirement |
 | --- | --- |
 | `requestId` | Non-empty client-generated string used to correlate the response. |
-| `wheelCircumferenceM` | Number from `0.5` through `4.0`, stored to `0.001 m` precision. |
+| `wheelCircumferenceM` | Effective virtual distance per sensed shaft revolution, from `0.1` through `10.0 m`, stored to `0.001 m` precision. The legacy field name is retained for compatibility. |
 | `magnetsPerRev` | Integer from `1` through `16`. |
 
 Both values are required and are applied atomically. Accepted changes are stored in EEPROM and survive device restarts. The firmware writes EEPROM only when a value changes, recalculates all calibration-dependent pulse thresholds immediately, resets the current speed measurement, and broadcasts fresh telemetry to every connected client.
+
+For a crank-mounted sensor, do not use the circumference traced by the pedal. An indoor bike's displayed speed is virtual and normally includes its internal crank-to-flywheel drive ratio. At a steady cadence, calculate the calibration from simultaneous readings:
+
+```text
+new distance/rev = current distance/rev × bike display speed ÷ VeloSync speed
+```
+
+For example, a current value of `1.25 m`, bike speed of `20 km/h`, and VeloSync speed of `5.5 km/h` gives `4.545 m` per sensed revolution.
 
 Every complete command receives a correlated result. A successful update returns the authoritative stored values:
 
@@ -122,7 +140,7 @@ Rejected commands return a machine-readable code and a user-facing message:
   "ok": false,
   "error": {
     "code": "out_of_range",
-    "message": "Wheel circumference must be 0.5-4.0 m and magnets per revolution 1-16."
+    "message": "Distance per sensor revolution must be 0.1-10.0 m and magnets per revolution 1-16."
   }
 }
 ```

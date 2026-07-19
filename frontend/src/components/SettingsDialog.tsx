@@ -4,6 +4,8 @@ import { getBaselineSpeed, setBaselineSpeed } from "../services/speedMapping";
 import { clearAllSessions } from "../services/db";
 import { velosyncWsConnector } from "../services/velosyncWs";
 import { useAppState } from "../context/AppContext";
+import VeloSyncCalibrationWizard from "./VeloSyncCalibrationWizard";
+import type { VeloSyncHardwareConfig } from "../types";
 
 const C = {
   text: "var(--text-primary)", textSec: "var(--text-secondary)", textMuted: "var(--text-muted)", textDim: "var(--text-dim)",
@@ -29,6 +31,7 @@ export default function SettingsDialog({ open, onClose }: Props) {
   const [wsSaved, setWsSaved] = useState(false);
   const [wheelCircumference, setWheelCircumference] = useState("");
   const [magnetsPerRev, setMagnetsPerRev] = useState("");
+  const [deviceHardwareConfig, setDeviceHardwareConfig] = useState<VeloSyncHardwareConfig | null>(null);
   const [hardwareConfigLoaded, setHardwareConfigLoaded] = useState(false);
   const [hardwareConfigSaving, setHardwareConfigSaving] = useState(false);
   const [hardwareConfigSaved, setHardwareConfigSaved] = useState(false);
@@ -38,6 +41,7 @@ export default function SettingsDialog({ open, onClose }: Props) {
 
   useEffect(() => {
     velosyncWsConnector.setConfigCallback((config) => {
+      setDeviceHardwareConfig(config);
       setWheelCircumference(String(config.wheelCircumferenceM));
       setMagnetsPerRev(String(config.magnetsPerRev));
       setHardwareConfigLoaded(true);
@@ -47,6 +51,7 @@ export default function SettingsDialog({ open, onClose }: Props) {
 
   useEffect(() => {
     if (!velosyncWsConnected) {
+      setDeviceHardwareConfig(null);
       setHardwareConfigLoaded(false);
       setHardwareConfigError("");
       setHardwareConfigSaved(false);
@@ -56,8 +61,8 @@ export default function SettingsDialog({ open, onClose }: Props) {
   const saveHardwareConfig = async () => {
     const wheel = Math.round(Number(wheelCircumference) * 1000) / 1000;
     const magnets = Number(magnetsPerRev);
-    if (!Number.isFinite(wheel) || wheel < 0.5 || wheel > 4) {
-      setHardwareConfigError("Wheel circumference must be between 0.5 and 4.0 m.");
+    if (!Number.isFinite(wheel) || wheel < 0.1 || wheel > 10) {
+      setHardwareConfigError("Distance per sensor revolution must be between 0.1 and 10.0 m.");
       return;
     }
     if (!Number.isInteger(magnets) || magnets < 1 || magnets > 16) {
@@ -142,13 +147,13 @@ export default function SettingsDialog({ open, onClose }: Props) {
               <>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   <div>
-                    <label style={{ display: "block", marginBottom: 4, fontSize: 11, color: C.textDim }}>Wheel circumference (m)</label>
+                    <label style={{ display: "block", marginBottom: 4, fontSize: 11, color: C.textDim }}>Effective distance / sensor rev (m)</label>
                     <input
                       type="number"
                       value={wheelCircumference}
                       onChange={(e) => setWheelCircumference(e.target.value)}
-                      min={0.5}
-                      max={4}
+                      min={0.1}
+                      max={10}
                       step={0.001}
                       disabled={hardwareConfigSaving}
                       style={{ boxSizing: "border-box", width: "100%", padding: "8px 12px", borderRadius: 8, border: border1, background: C.bgInput, color: C.text, fontSize: 14 }}
@@ -175,6 +180,19 @@ export default function SettingsDialog({ open, onClose }: Props) {
                 >
                   {hardwareConfigSaving ? "Saving…" : hardwareConfigSaved ? "✓ Saved" : "Save to device"}
                 </button>
+                {deviceHardwareConfig && (
+                  <VeloSyncCalibrationWizard
+                    currentDistanceM={deviceHardwareConfig.wheelCircumferenceM}
+                    magnetsPerRev={deviceHardwareConfig.magnetsPerRev}
+                    onSaved={(config) => {
+                      setDeviceHardwareConfig(config);
+                      setWheelCircumference(String(config.wheelCircumferenceM));
+                      setMagnetsPerRev(String(config.magnetsPerRev));
+                      setHardwareConfigSaved(true);
+                      window.setTimeout(() => setHardwareConfigSaved(false), 1500);
+                    }}
+                  />
+                )}
               </>
             ) : (
               <div style={{ fontSize: 12, color: C.textDim }}>
@@ -186,7 +204,9 @@ export default function SettingsDialog({ open, onClose }: Props) {
                 {hardwareConfigError}
               </div>
             )}
-            <div style={{ fontSize: 11, color: C.textDim, marginTop: 6 }}>Accepted range: 0.5–4.0 m and 1–16 magnets. Values are stored on the device.</div>
+            <div style={{ fontSize: 11, color: C.textDim, marginTop: 6 }}>
+              This is virtual distance per full revolution of the shaft carrying the magnet, not the pedal's circular path. Calibrate with: current value × bike speed ÷ VeloSync speed. Range: 0.1–10.0 m and 1–16 magnets.
+            </div>
           </div>
           <div>
             <label style={{ display: "block", marginBottom: 6, fontSize: 13, color: C.textSec, fontWeight: 500 }}>Google API Key</label>
