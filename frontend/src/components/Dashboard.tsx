@@ -8,17 +8,20 @@ import SpeedSlider from "./SpeedSlider";
 import AudioControl from "./AudioControl";
 import SpeedSourceSelector from "./SpeedSourceSelector";
 import SessionBar from "./SessionBar";
-import MapOverlay from "./MapOverlay";
+import RouteMapOverlay from "./RouteMapOverlay";
 import LibraryView from "./LibraryView";
 import DownloadPanel from "./DownloadPanel";
 import QueuePanel from "./QueuePanel";
 
 export default function Dashboard() {
-  const { playlist, isPlaying, setIsPlaying, setLibrary, speedSource, currentSpeedKmh } = useAppState();
+  const { playlist, currentVideoIndex, isPlaying, setIsPlaying, setLibrary, speedSource, currentSpeedKmh, manualSpeedKmh } = useAppState();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"queue" | "library" | "download">("queue");
   const playerVideoRef = useRef<HTMLVideoElement | null>(null);
   const autoPausedRef = useRef(false);
+
+  const currentVideo = playlist[currentVideoIndex];
+  const isStreetView = currentVideo?.source === "streetview";
 
   useSessionTimer();
 
@@ -44,17 +47,23 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (speedSource === "manual") {
-      autoPausedRef.current = false;
-      return;
-    }
-    if (currentSpeedKmh <= 0 && isPlaying) {
-      autoPausedRef.current = true;
-      setIsPlaying(false);
-    } else if (currentSpeedKmh > 0 && !isPlaying && autoPausedRef.current) {
-      autoPausedRef.current = false;
-      setIsPlaying(true);
-    }
-  }, [currentSpeedKmh, isPlaying, speedSource, setIsPlaying]);
+        if (manualSpeedKmh <= 0 && isPlaying) {
+          autoPausedRef.current = true;
+          setIsPlaying(false);
+        } else if (manualSpeedKmh > 0 && !isPlaying && autoPausedRef.current) {
+          autoPausedRef.current = false;
+          setIsPlaying(true);
+        }
+      } else {
+        if (currentSpeedKmh <= 0 && isPlaying) {
+          autoPausedRef.current = true;
+          setIsPlaying(false);
+        } else if (currentSpeedKmh > 0 && !isPlaying && autoPausedRef.current) {
+          autoPausedRef.current = false;
+          setIsPlaying(true);
+        }
+      }
+    }, [currentSpeedKmh, manualSpeedKmh, isPlaying, speedSource, setIsPlaying]);
 
   const handleStop = () => {
     autoPausedRef.current = false;
@@ -134,9 +143,9 @@ export default function Dashboard() {
             </div>
           )}
 
-          {!isFullscreen && (
+          {!isFullscreen && isStreetView && (
             <div style={{ marginTop: 16 }}>
-              <MapOverlay />
+                        <RouteMapOverlay />
             </div>
           )}
         </div>

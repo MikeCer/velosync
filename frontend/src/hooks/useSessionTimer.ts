@@ -25,7 +25,12 @@ export function useSessionTimer() {
   const sessionRef = useRef({ start: 0, distance: 0, hrSamples: [] as number[] });
 
   useEffect(() => {
-    if (isPlaying) {
+      // Auto-pause when manual speed is zero
+      if (speedSource === "manual" && manualSpeedKmh === 0 && isPlaying) {
+        setIsPlaying(false);
+      }
+
+      if (isPlaying) {
       sessionRef.current.start = Date.now() - sessionElapsed * 1000;
       sessionRef.current.hrSamples = [];
       intervalRef.current = window.setInterval(() => {

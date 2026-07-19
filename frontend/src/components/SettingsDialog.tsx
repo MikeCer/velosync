@@ -211,7 +211,7 @@ export default function SettingsDialog({ open, onClose }: Props) {
           <div>
             <label style={{ display: "block", marginBottom: 6, fontSize: 13, color: C.textSec, fontWeight: 500 }}>Google API Key</label>
             <div style={{ display: "flex", gap: 8 }}>
-              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveGoogleApiKey()} placeholder="AIza..." style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: border1, background: C.bgInput, color: C.text, fontSize: 14 }} />
+              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveGoogleApiKey()} placeholder="[key]..." style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: border1, background: C.bgInput, color: C.text, fontSize: 14 }} />
               <button onClick={saveGoogleApiKey} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: apiKeySaved ? C.success : C.accent, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{apiKeySaved ? "✓" : "Save"}</button>
             </div>
             <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>
